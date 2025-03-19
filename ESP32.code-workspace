@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"name": "ESP32-GB",
+			"path": "../ESP32-GB"
+		},
+		{
+			"name": "ESP32-FinalHack",
+			"path": "."
+		}
+	],
+	"settings": {}
+}
