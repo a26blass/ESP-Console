@@ -109,7 +109,7 @@ void display_panic_message(const XtExcFrame *exc_frame) {
 // Panic Handler
 extern "C" void __wrap_esp_panic_handler(void *frame) {
     if (setup_complete) {
-        tft.fillScreen(ILI9341_BLACK);
+        tft.fillScreen(ILI9341_BLUE);
         dbgline = 10;
     }
 
@@ -139,7 +139,9 @@ extern "C" void __wrap_esp_panic_handler(void *frame) {
     // Wait for logs to be flushed before restarting
     vTaskDelay(pdMS_TO_TICKS(5000));  // Give 5 seconds for logs to be read
 
-    esp_restart();
+    #ifndef DEBUG
+        esp_restart();
+    #endif
 }
 
 int getRandomInt(int min, int max) {
@@ -247,6 +249,7 @@ void nextLevel() {
     // Load next level from memory
     currentLevel = (currentLevel + 1) % numLevels;
     loadLevel(currentLevel);
+    Serial.println("NEWLEVEL LOADED FROM PROGMEM...");
 
     // Reset collided brick
     collided_r = -1;
@@ -254,10 +257,23 @@ void nextLevel() {
 
     // Reset game params, draw bricks
     resetGame();
+    Serial.println("GAME STATE RESET...");
 
     // Increment dx/dy, bounded by MAX_SPEED
     dx = min(abs(dx)+0.15, MAX_SPEED);
     dy = -dx;
+
+    // Query display status
+    uint8_t status = tft.readcommand8(ILI9341_RDMODE);
+    Serial.print("DISPLAY CHECK... STATUS = 0x");
+    Serial.println(status, HEX);
+
+    if (status != 0xCA) {
+        Serial.println("DISPLAY CHECK FAIL, ABORTING...");
+        esp_system_abort("DISPLAY CHECK FAIL");
+    }
+
+    Serial.println("NEWLEVEL BEGIN...");
 }
 
 // Powerup drawing
