@@ -204,6 +204,10 @@ int getRandomInt(int min, int max) {
     return min + (esp_random() % (max - min + 1));
 }
 
+float getRandomFloat(float min, float max) {
+    return min + (max - min) * (esp_random() / (float)UINT32_MAX);
+}
+
 uint16_t getBrickColor(int durability) {
     switch (durability) {
         case 3: return ILI9341_GREEN;
@@ -365,7 +369,7 @@ void drawLaser(int x, int y) {
 }
 
 // Update paddle position (to be called in loop)
-void movePaddle(int direction) {
+void movePaddle(float direction) {
     // Save the old paddle position
     int oldPaddleX = paddleX;
 
@@ -490,6 +494,96 @@ const char* reset_reason_to_string(esp_reset_reason_t reset_reason) {
         default:
             return "UNKNOWN RESET REASON";
     }
+}
+
+// Paddle collision logic
+
+// Function to get a random active brick
+bool getRandomActiveBrick(int &row, int &col) {
+    int activeBricks = 0;
+
+    // Count the number of active bricks
+    for (int r = 0; r < CurrentLevel.brickRows; r++) {
+        for (int c = 0; c < CurrentLevel.brickCols; c++) {
+            if (CurrentLevel.bricks[r][c] > 0) {
+                activeBricks++;
+            }
+        }
+    }
+
+    if (activeBricks == 0) {
+        return false; // No active bricks
+    }
+
+    // Select a random active brick
+    int randomIndex = getRandomInt(0, activeBricks - 1);
+    int count = 0;
+
+    for (int r = 0; r < CurrentLevel.brickRows; r++) {
+        for (int c = 0; c < CurrentLevel.brickCols; c++) {
+            if (CurrentLevel.bricks[r][c] > 0) {
+                if (count == randomIndex) {
+                    row = r;
+                    col = c;
+                    return true;
+                }
+                count++;
+            }
+        }
+    }
+
+    return false; // Should never reach here
+}
+
+// Function to calculate the required ball trajectory
+float calculateRequiredAngle(int targetRow, int targetCol) {
+    // Get the center of the target brick
+    int brickCenterX = CurrentLevel.brickOffsetX + targetCol * (CurrentLevel.brickWidth + CurrentLevel.brickSpacing) + CurrentLevel.brickWidth / 2;
+    int brickCenterY = CurrentLevel.brickOffsetY + targetRow * (CurrentLevel.brickHeight + CurrentLevel.brickSpacing) + CurrentLevel.brickHeight / 2;
+
+    // Calculate the difference between the ball and the brick
+    float deltaX = brickCenterX - x;
+    float deltaY = brickCenterY - y;
+
+    // Calculate the required angle (in radians)
+    float requiredAngle = atan2(deltaY, deltaX);
+
+    return requiredAngle;
+}
+
+// Function to calculate the paddle collision point
+float calculatePaddleCollisionPoint(float requiredAngle) {
+    // Calculate the ball's vertical distance to the paddle
+    float distanceToPaddle = paddleY - y;
+
+    // Calculate the horizontal distance the ball needs to travel
+    float deltaX = distanceToPaddle * tan(requiredAngle);
+
+    // Calculate the required x position on the paddle
+    float paddleCollisionX = x + deltaX;
+
+    // Ensure the collision point is within the paddle's bounds
+    paddleCollisionX = max((float)paddleX, min((float)paddleX + paddleWidth, paddleCollisionX));
+
+    return paddleCollisionX;
+}
+
+// Function to calculate the exact x position on the paddle for a guaranteed hit
+float calculateGuaranteedPaddleCollision() {
+    int targetRow, targetCol;
+
+    // Get a random active brick
+    if (!getRandomActiveBrick(targetRow, targetCol)) {
+        return -1; // No active bricks
+    }
+
+    // Calculate the required angle to hit the brick
+    float requiredAngle = calculateRequiredAngle(targetRow, targetCol);
+
+    // Calculate the paddle collision point
+    float paddleCollisionX = calculatePaddleCollisionPoint(requiredAngle);
+
+    return paddleCollisionX;
 }
 
 
@@ -627,15 +721,19 @@ void loop() {
     // TODO: Remove
     if (!ballOnPaddle) {
         int paddleMid = paddleX + paddleWidth/2;
-        if (paddleX + 5 > x) {
-            movePaddle(-paddle_speed);
-        } else if (paddleX + paddleWidth - 5 < x) {
-            movePaddle(paddle_speed);
-        } else if (paddleMid + 6 >= x && paddleMid-5  <= x && left) {
-            movePaddle(-paddle_speed);
+        int leftbound = 5;
+        int rightbound = 5;
+        float speedjiggle = getRandomFloat(-0.25, 0.25);
+
+        if (paddleX + leftbound > x) {
+            movePaddle(-paddle_speed-speedjiggle);
+        } else if (paddleX + paddleWidth - rightbound < x) {
+            movePaddle(paddle_speed+speedjiggle);
+        } else if (paddleMid + rightbound >= x && paddleMid - leftbound <= x && left) {
+            movePaddle(-paddle_speed-speedjiggle);
             left = false;
-        } else if (paddleMid + 5 >= x && paddleMid-4  <= x && !left) {
-            movePaddle(paddle_speed);
+        } else if (paddleMid + rightbound >= x && paddleMid - leftbound <= x && !left) {
+            movePaddle(paddle_speed+speedjiggle);
             left = true;
         }
     }
