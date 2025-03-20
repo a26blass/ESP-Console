@@ -10,9 +10,8 @@
 #include "esp_log.h"
 #include "esp_task_wdt.h"
 #include "xtensa/xtensa_context.h"
-extern "C" {
-    #include <malloc.h>
-}
+#include "BluetoothSerial.h"
+
 
 // Pin constants
 #define BOOT_PIN 0 
@@ -26,6 +25,7 @@ extern "C" {
 #define SCREEN_HEIGHT 320
 #define HEADER_HEIGHT 15
 #define TOP_BUFFER 15
+#define DISPLAY_OK 0xCA
 
 // Game constants
 #define MAX_SPEED 3.5
@@ -36,12 +36,28 @@ extern "C" {
 #define DEBUG
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+BluetoothSerial SerialBT;
 
 // Ball info
 const int radius = 3;
 float x = 30, y = 100;
-float dx = 2, dy = -2;
+float dx = 2, dy = -2;  
+float speed = sqrt(8);
+bool ballOnPaddle = true;
+float launchAngle = 150; // Angle in degrees
+int prevEndX = -1;
+int prevEndY = -1;
+
 int collided_r, collided_c = -1;
+
+// Paddle info
+const int paddleWidth = 50;
+const int paddleHeight = 5;
+int paddleX = (SCREEN_WIDTH - paddleWidth) / 2;
+const int paddleY = SCREEN_HEIGHT - 20; // 20 pixels from bottom
+const float BOUNCE_FACTOR = 1.0; // Adjust how much the angle changes
+float paddle_speed =  max(1.0, (speed)/3.0);
+bool left = true;
 
 // Game info
 LevelInfo CurrentLevel;
@@ -64,11 +80,6 @@ void drawdebugtext(const char* text) {
     tft.println(text);
 }
 
-int freeMemory() {
-    struct mallinfo mi = mallinfo();
-    return mi.fordblks;
-}
-
 // Function to display each line separately
 void draw_panic_log(const char *text) {
     char buffer[256];  
@@ -87,48 +98,93 @@ void draw_panic_log(const char *text) {
 void display_panic_message(const XtExcFrame *exc_frame) {
     char line[64];
 
-    sprintf(line, "PANIC: KERNEL PANIC, ABORTING...");
+    sprintf(line, "KERNEL PANIC, ABORTING...");
     drawdebugtext(line);
 
-    sprintf(line, "PC (Program Counter): 0x%08X", exc_frame->pc);
+    // Program Counter, Stack Pointer, Link Register
+    sprintf(line, "PC : 0x%08X", exc_frame->pc);
     drawdebugtext(line);
 
-    sprintf(line, "LR (Link Register): 0x%08X", exc_frame->a0);
+    sprintf(line, "LR : 0x%08X", exc_frame->a0);
     drawdebugtext(line);
 
-    sprintf(line, "SP (Stack Pointer): 0x%08X", exc_frame->a1);
+    sprintf(line, "SP : 0x%08X", exc_frame->a1);
     drawdebugtext(line);
 
-    sprintf(line, "EXCCAUSE (Exception Cause): %d", exc_frame->exccause);
+    // Print general-purpose registers A2–A15
+    for (int i = 2; i <= 15; i++) {
+        sprintf(line, "A%-2d: 0x%08X", i, *((uint32_t *)exc_frame + i));
+        drawdebugtext(line);
+    }
+
+    // Exception cause and address
+    sprintf(line, "EXCCAUSE : %d", exc_frame->exccause);
     drawdebugtext(line);
 
-    sprintf(line, "EXCVADDR (Fault Address): 0x%08X", exc_frame->excvaddr);
+    sprintf(line, "EXCVADDR : 0x%08X", exc_frame->excvaddr);
     drawdebugtext(line);
+
+    // Print special-purpose registers (if accessible)
+    uint32_t ps;
+    asm volatile("rsr.ps %0" : "=r"(ps));  // Processor State Register
+    sprintf(line, "PS : 0x%08X", ps);
+    drawdebugtext(line);
+
+    uint32_t sar;
+    asm volatile("rsr.sar %0" : "=r"(sar));  // Shift Amount Register
+    sprintf(line, "SAR : 0x%08X", sar);
+    drawdebugtext(line);
+
+    char msg[40];
+    sprintf(msg, "FREE HEAP MEMORY: %dB (%dKB)", esp_get_free_heap_size(), esp_get_free_heap_size()/1000);
+    Serial.println(msg);
+    #ifdef DEBUG
+        drawdebugtext(msg);
+    #endif
+
+    UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(NULL);
+    sprintf(msg, "FREE STACK MEMORY: %dB (%dKB)", stack_remaining, stack_remaining/1000);
+    Serial.println(msg);
+    #ifdef DEBUG
+        drawdebugtext(msg);
+    #endif
 }
 
 // Panic Handler
 extern "C" void __wrap_esp_panic_handler(void *frame) {
-    if (setup_complete) {
-        tft.fillScreen(ILI9341_BLUE);
-        dbgline = 10;
-    }
+    tft.fillScreen(ILI9341_BLUE);
+    dbgline = 10;
 
     // Cast frame to a CPU context structure
     XtExcFrame *exc_frame = (XtExcFrame *)frame;
+
+    // Print a warning message
+    if (screen_init)
+        display_panic_message(exc_frame);
 
     // Print a panic message
     ESP_LOGE("PANIC", "KERNEL PANIC, ABORTING...");
 
     // Extract and print CPU register values
-    ESP_LOGE("PANIC", "PC (Program Counter): 0x%08X", exc_frame->pc);
-    ESP_LOGE("PANIC", "LR (Link Register): 0x%08X", exc_frame->a0);
-    ESP_LOGE("PANIC", "SP (Stack Pointer): 0x%08X", exc_frame->a1);
-    ESP_LOGE("PANIC", "EXCCAUSE (Exception Cause): %d", exc_frame->exccause);
-    ESP_LOGE("PANIC", "EXCVADDR (Faulting Address): 0x%08X", exc_frame->excvaddr);
+    ESP_LOGE("PANIC", "PC        (Program Counter)  : 0x%08X", exc_frame->pc);
+    ESP_LOGE("PANIC", "LR        (Link Register)    : 0x%08X", exc_frame->a0);
+    ESP_LOGE("PANIC", "SP        (Stack Pointer)    : 0x%08X", exc_frame->a1);
 
-    // Print a warning message
-    if (screen_init)
-        display_panic_message(exc_frame);
+    // Print all general-purpose registers (A2–A15)
+    for (int i = 2; i <= 15; i++) {
+        ESP_LOGE("PANIC", "A%-2d       : 0x%08X", i, *((uint32_t *)exc_frame + i));
+    }
+
+    ESP_LOGE("PANIC", "EXCCAUSE  (Exception Cause)  : %d", exc_frame->exccause);
+    ESP_LOGE("PANIC", "EXCVADDR  (Faulting Address) : 0x%08X", exc_frame->excvaddr);
+
+    // Read special-purpose registers (Processor State Register and Shift Amount Register)
+    uint32_t ps, sar;
+    asm volatile("rsr.ps %0" : "=r"(ps));   // Read Processor State Register
+    asm volatile("rsr.sar %0" : "=r"(sar)); // Read Shift Amount Register
+
+    ESP_LOGE("PANIC", "PS        (Processor State)  : 0x%08X", ps);
+    ESP_LOGE("PANIC", "SAR       (Shift Amount)     : 0x%08X", sar);
         
     Serial.println("KERNEL PANIC");
 
@@ -137,7 +193,7 @@ extern "C" void __wrap_esp_panic_handler(void *frame) {
     esp_task_wdt_add(NULL);
     
     // Wait for logs to be flushed before restarting
-    vTaskDelay(pdMS_TO_TICKS(5000));  // Give 5 seconds for logs to be read
+    vTaskDelay(pdMS_TO_TICKS(20000));  // Give 5 seconds for logs to be read
 
     #ifndef DEBUG
         esp_restart();
@@ -235,8 +291,12 @@ void drawBrick(int row, int col) {
 void resetGame() {
     tft.fillScreen(ILI9341_BLACK);
     drawHeader();
-    x = getRandomInt(20, 220);
-    y = 300;
+    paddleX = (SCREEN_WIDTH - paddleWidth) / 2;
+    x = paddleX + paddleWidth/2;
+    y = paddleY - paddleHeight - radius-1;
+    ballOnPaddle = true;
+    launchAngle = getRandomInt(30, 150);
+
     for (int r = 0; r < CurrentLevel.brickRows; r++) {
         for (int c = 0; c < CurrentLevel.brickCols; c++) {
             drawBrick(r, c);
@@ -247,8 +307,8 @@ void resetGame() {
 void nextLevel() {
     tft.fillScreen(ILI9341_BLACK);
     // Load next level from memory
-    currentLevel = (currentLevel + 1) % numLevels;
-    loadLevel(currentLevel);
+    currentLevel = (currentLevel + 1);
+    loadLevel(currentLevel % numLevels);
     Serial.println("NEWLEVEL LOADED FROM PROGMEM...");
 
     // Reset collided brick
@@ -259,19 +319,26 @@ void nextLevel() {
     resetGame();
     Serial.println("GAME STATE RESET...");
 
-    // Increment dx/dy, bounded by MAX_SPEED
-    dx = min(abs(dx)+0.15, MAX_SPEED);
-    dy = -dx;
+    // Increment speed
+    speed = min(speed + 0.15, MAX_SPEED);
+
+    // Normalize direction and apply new speed
+    float norm = sqrt(dx * dx + dy * dy);
+    dx = (dx / norm) * speed;
+    dy = (dy / norm) * speed;
+    paddle_speed = max(1.0, (speed)/3.0);
 
     // Query display status
     uint8_t status = tft.readcommand8(ILI9341_RDMODE);
     Serial.print("DISPLAY CHECK... STATUS = 0x");
     Serial.println(status, HEX);
 
-    if (status != 0xCA) {
+    if (status != DISPLAY_OK) {
         Serial.println("DISPLAY CHECK FAIL, ABORTING...");
         esp_system_abort("DISPLAY CHECK FAIL");
     }
+
+    Serial.println("OK!");
 
     Serial.println("NEWLEVEL BEGIN...");
 }
@@ -295,6 +362,78 @@ void drawLargeBall(int x, int y) {
 
 void drawLaser(int x, int y) {
     tft.fillRoundRect(x - 10, y, 20, 6, 3, ILI9341_RED);
+}
+
+// Update paddle position (to be called in loop)
+void movePaddle(int direction) {
+    // Save the old paddle position
+    int oldPaddleX = paddleX;
+
+    // Update the paddle position
+    paddleX += direction * 5; // Move left or right
+    paddleX = max(0, min(SCREEN_WIDTH - paddleWidth, paddleX)); // Keep in bounds
+
+    // Only redraw if the paddle has actually moved
+    if (oldPaddleX != paddleX) {
+        // Overdraw the old paddle with a black box
+        tft.fillRect(oldPaddleX, paddleY, paddleWidth, paddleHeight, ILI9341_BLACK);
+
+        // Draw the new paddle at the updated position
+        tft.fillRect(paddleX, paddleY, paddleWidth, paddleHeight, ILI9341_WHITE);
+    }
+}
+
+void drawLaunchAngleIndicator() {
+    int indicatorLength = 20; // Length of the indicator
+    
+    // Convert angle to radians
+    double angleRad = launchAngle * M_PI / 180.0;
+    
+    // Ball position (assuming it's at the center of the paddle)
+    int ballX = x;
+    int ballY = y;
+
+    // Calculate the new end point of the indicator
+    int endX = ballX + indicatorLength * cos(angleRad);
+    int endY = ballY - indicatorLength * sin(angleRad);
+
+    // Erase previous line if it exists
+    if (prevEndX != -1 && prevEndY != -1 && prevEndX != endX && prevEndY != endY) {
+        tft.drawLine(ballX, ballY, prevEndX, prevEndY, ILI9341_BLACK);
+    }
+
+    // Draw new indicator line
+    tft.drawLine(ballX, ballY, endX, endY, ILI9341_WHITE);
+
+    // Store new end position
+    prevEndX = endX;
+    prevEndY = endY;
+}
+
+void increaseLaunchAngle() {
+    if (launchAngle < 150) {
+        launchAngle += 5;
+        drawLaunchAngleIndicator();
+    }
+}
+
+void decreaseLaunchAngle() {
+    if (launchAngle > 30) {
+        launchAngle -= 5;
+        drawLaunchAngleIndicator();
+    }
+}
+
+void launchBall() {
+    dx = speed * cos(launchAngle * M_PI / 180.0);
+    dy = -speed * sin(launchAngle * M_PI / 180.0);
+    ballOnPaddle = false;
+}
+
+void handleInput() {
+    if (digitalRead(BOOT_PIN) == LOW) {
+        launchBall();
+    }
 }
 
 bool check_game_finished() {
@@ -367,7 +506,7 @@ void setup() {
     Serial.print("DISPLAY INIT... STATUS = 0x");
     Serial.println(status, HEX);
 
-    if (status != 0xCA) {
+    if (status != DISPLAY_OK) {
         Serial.println("DISPLAY INITIALIZATION FAIL, ABORTING...");
         delay(3000);
         esp_system_abort("DISPLAY INIT FAIL");
@@ -400,6 +539,7 @@ void setup() {
     sprintf(msg, "BLU: %d | BLE : %d | IEEE802154 : %d", blu, ble, w_support);
     Serial.println(msg);
     #ifdef DEBUG
+        drawdebugtext("FEATURE FLAGS:");
         drawdebugtext(msg);
     #endif
     sprintf(msg, "W_BGN: %d | FLASH : %d | PSRAM : %d", wifi_bgn, flash, psram);
@@ -434,6 +574,13 @@ void setup() {
         drawdebugtext(msg);
     #endif
 
+    UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(NULL);
+    sprintf(msg, "FREE STACK MEMORY: %dB (%dKB)", stack_remaining, stack_remaining/1000);
+    Serial.println(msg);
+    #ifdef DEBUG
+        drawdebugtext(msg);
+    #endif
+
     sprintf(msg, "ESP IDF %s", esp_get_idf_version());
     Serial.println(msg);
     #ifdef DEBUG
@@ -445,15 +592,15 @@ void setup() {
 
     
     #ifdef DEBUG
-    drawdebugtext("LEVEL LOAD OK...");
-    #endif  
+        drawdebugtext("LEVEL LOAD OK...");
+    #endif
 
     #ifdef DEBUG
         drawdebugtext("STARTING LEVEL...");
-        delay(2000);
+        delay(1000);
     #endif
     resetGame();
-    setup_complete = true;
+    setup_complete = true;    
 }
 
 void loop() {
@@ -462,103 +609,176 @@ void loop() {
         while (digitalRead(BOOT_PIN) == LOW); // Wait for button release (freeze)
         nextLevel(); // Move to next level
     }
+    
+    
+    // Paddle logic
+    bool hitPaddle = false;
+    tft.fillRect(paddleX, paddleY, paddleWidth, paddleHeight, ILI9341_WHITE);
 
-    float old_x = x, old_y = y;
-    bool game_finished = true;
-    x += dx;
-    y += dy;
+    if (y + radius >= paddleY && y + radius <= paddleY + paddleHeight && x >= paddleX && x <= paddleX + paddleWidth) {
+        float hitPos = (x - (paddleX + paddleWidth / 2)) / (paddleWidth / 2); // Normalize [-1, 1]
 
-    if (x - radius <= 0 && dx < 0) dx = -dx;
-    if (x + radius >= tft.width() && dx > 0) dx = -dx;
-    if (y - radius <= 15 && dy < 0) dy = -dy;
-    if (old_y - radius <= 15) redraw_header = true; // bouncing off top header may cause ball shadow to erase it
-    if (y + radius >= tft.height() && dy > 0) dy = -dy;
+        dx = speed * hitPos * BOUNCE_FACTOR; // Angle the bounce
+        dy = -sqrt(speed * speed - dx * dx); // Adjust dy to preserve total speed
 
-    if (y + radius >= CurrentLevel.brickOffsetY) {
-        for (int r = 0; r < CurrentLevel.brickRows; r++) {
-            for (int c = 0; c < CurrentLevel.brickCols; c++) {
-                if (CurrentLevel.bricks[r][c] > 0) {
-                    int bx = CurrentLevel.brickOffsetX + c * (CurrentLevel.brickWidth + CurrentLevel.brickSpacing);
-                    int by = CurrentLevel.brickOffsetY + r * (CurrentLevel.brickHeight + CurrentLevel.brickSpacing);
+        hitPaddle = true;
+    }
 
-                    int ballLeft = x - radius;
-                    int ballRight = x + radius;
-                    int oldBallLeft = old_x - radius;
-                    int oldBallRight = old_x + radius;
-                    int ballTop = y - radius;
-                    int ballBottom = y + radius;
-                    int oldBallTop = old_y - radius;
-                    int oldBallBottom = old_y + radius;
-                    int brickLeft = bx;
-                    int brickRight = bx + CurrentLevel.brickWidth;
-                    int brickTop = by;
-                    int brickBottom = by + CurrentLevel.brickHeight;
+    // TODO: Remove
+    if (!ballOnPaddle) {
+        int paddleMid = paddleX + paddleWidth/2;
+        if (paddleX + 5 > x) {
+            movePaddle(-paddle_speed);
+        } else if (paddleX + paddleWidth - 5 < x) {
+            movePaddle(paddle_speed);
+        } else if (paddleMid + 6 >= x && paddleMid-5  <= x && left) {
+            movePaddle(-paddle_speed);
+            left = false;
+        } else if (paddleMid + 5 >= x && paddleMid-4  <= x && !left) {
+            movePaddle(paddle_speed);
+            left = true;
+        }
+    }
+    
+    // Ball logic
 
-                    bool collisionX = (oldBallRight <= brickLeft && ballRight >= brickLeft) || 
-                                      (oldBallLeft >= brickRight && ballLeft <= brickRight);
+    if (ballOnPaddle) {
+        x = paddleX + paddleWidth/2;
+        y = paddleY - paddleHeight - radius-1;
+        
+        launchAngle = getRandomInt(30, 150);
 
-                    bool collisionY = (oldBallBottom <= brickTop && ballBottom >= brickTop) || 
-                                      (oldBallTop >= brickBottom && ballTop <= brickBottom);
+        while (launchAngle > 80 && launchAngle < 100) {
+            launchAngle = getRandomInt(30, 150);
+        }
 
-                    if ((ballRight > brickLeft && ballLeft < brickRight && 
-                        ballBottom > brickTop && ballTop < brickBottom) ||
-                        (collisionX && ballBottom > brickTop && ballTop < brickBottom) ||
-                        (collisionY && ballRight > brickLeft && ballLeft < brickRight)) {
-                        collided_c = c;
-                        collided_r = r;  
-                        CurrentLevel.bricks[r][c]--;
-                        if (CurrentLevel.bricks[r][c] == 0) {
-                            game_finished = check_game_finished();
-                            tft.fillRect(bx, by, CurrentLevel.brickWidth, CurrentLevel.brickHeight, ILI9341_BLACK);
-                            points += 10;
-                            drawHeader();
-                        } else {
-                            game_finished = false;
-                            drawBrick(r, c);
+        drawLaunchAngleIndicator();
+
+        
+        tft.fillCircle(x, y, radius, ILI9341_WHITE);
+        
+        if (digitalRead(BOOT_PIN) == LOW) {
+            launchBall();
+        }
+        
+        // TODO: Remove
+        delay(2500);
+        launchBall();
+    } else {
+        bool game_finished = true;
+        float old_x = x, old_y = y;
+
+        x += dx;
+        y += dy;
+
+        if (x - radius <= 0 && dx < 0) dx = -dx;
+        if (x + radius >= tft.width() && dx > 0) dx = -dx;
+        if (y - radius <= 15 && dy < 0) dy = -dy;
+        if (old_y - radius <= 15) redraw_header = true; // bouncing off top header may cause ball shadow to erase it
+        if (y + radius >= tft.height() && dy > 0 && !hitPaddle) {
+            if (lives > 0) {
+                lives -= 1;
+            } else {
+                currentLevel = -1;
+                points = 0;
+                lives = 3;
+
+                nextLevel();
+            }
+            drawHeader();
+
+            x = paddleX + paddleWidth/2;
+            y = paddleY - paddleHeight - radius-1;
+
+            ballOnPaddle = true;
+        }
+
+        if (y + radius >= CurrentLevel.brickOffsetY) {
+            for (int r = 0; r < CurrentLevel.brickRows; r++) {
+                for (int c = 0; c < CurrentLevel.brickCols; c++) {
+                    if (CurrentLevel.bricks[r][c] > 0) {
+                        int bx = CurrentLevel.brickOffsetX + c * (CurrentLevel.brickWidth + CurrentLevel.brickSpacing);
+                        int by = CurrentLevel.brickOffsetY + r * (CurrentLevel.brickHeight + CurrentLevel.brickSpacing);
+
+                        int ballLeft = x - radius;
+                        int ballRight = x + radius;
+                        int oldBallLeft = old_x - radius;
+                        int oldBallRight = old_x + radius;
+                        int ballTop = y - radius;
+                        int ballBottom = y + radius;
+                        int oldBallTop = old_y - radius;
+                        int oldBallBottom = old_y + radius;
+                        int brickLeft = bx;
+                        int brickRight = bx + CurrentLevel.brickWidth;
+                        int brickTop = by;
+                        int brickBottom = by + CurrentLevel.brickHeight;
+
+                        bool collisionX = (oldBallRight <= brickLeft && ballRight >= brickLeft) || 
+                                        (oldBallLeft >= brickRight && ballLeft <= brickRight);
+
+                        bool collisionY = (oldBallBottom <= brickTop && ballBottom >= brickTop) || 
+                                        (oldBallTop >= brickBottom && ballTop <= brickBottom);
+
+                        if ((ballRight > brickLeft && ballLeft < brickRight && 
+                            ballBottom > brickTop && ballTop < brickBottom) ||
+                            (collisionX && ballBottom > brickTop && ballTop < brickBottom) ||
+                            (collisionY && ballRight > brickLeft && ballLeft < brickRight)) {
+                            collided_c = c;
+                            collided_r = r;  
+                            CurrentLevel.bricks[r][c]--;
+                            if (CurrentLevel.bricks[r][c] == 0) {
+                                game_finished = check_game_finished();
+                                tft.fillRect(bx, by, CurrentLevel.brickWidth, CurrentLevel.brickHeight, ILI9341_BLACK);
+                                points += 10;
+                                drawHeader();
+                            } else {
+                                game_finished = false;
+                                drawBrick(r, c);
+                            }
+                        
+                            int overlapLeft = ballRight - brickLeft;
+                            int overlapRight = brickRight - ballLeft;
+                            int overlapTop = ballBottom - brickTop;
+                            int overlapBottom = brickBottom - ballTop;
+                            int minOverlap = min(min(overlapLeft, overlapRight), min(overlapTop, overlapBottom));
+
+                            if (minOverlap == overlapLeft || minOverlap == overlapRight) {
+                                dx = -dx;
+                            } else {
+                                dy = -dy;
+                            }
+                            break;
+                        } 
+                        else if (oldBallRight > brickLeft && oldBallLeft < brickRight && oldBallBottom > brickTop && oldBallTop < brickBottom) {
+                            collided_c = c;
+                            collided_r = r;   
                         }
-                      
-                        int overlapLeft = ballRight - brickLeft;
-                        int overlapRight = brickRight - ballLeft;
-                        int overlapTop = ballBottom - brickTop;
-                        int overlapBottom = brickBottom - ballTop;
-                        int minOverlap = min(min(overlapLeft, overlapRight), min(overlapTop, overlapBottom));
-
-                        if (minOverlap == overlapLeft || minOverlap == overlapRight) {
-                            dx = -dx;
-                        } else {
-                            dy = -dy;
-                        }
-                        break;
-                    } 
-                    else if (oldBallRight > brickLeft && oldBallLeft < brickRight && oldBallBottom > brickTop && oldBallTop < brickBottom) {
-                        collided_c = c;
-                        collided_r = r;   
+                        game_finished = false;
                     }
-                    game_finished = false;
                 }
             }
+        } else {
+            game_finished = false;
+            collided_c = -1;
+            collided_r = -1;
         }
-    } else {
-        game_finished = false;
-        collided_c = -1;
-        collided_r = -1;
-    }
 
-    // Draw ball in new location, erase in old location
-    tft.fillCircle(old_x, old_y, radius, ILI9341_BLACK);
-    tft.fillCircle(x, y, radius, ILI9341_WHITE);
-    
-    if (collided_r >= 0 && collided_c >= 0) {
-        drawBrick(collided_r, collided_c);
-    }
-    if (redraw_header) {
-        drawHeader();
-        redraw_header = false;
-    }
+        // Draw ball in new location, erase in old location
+        tft.fillCircle(old_x, old_y, radius, ILI9341_BLACK);
+        tft.fillCircle(x, y, radius, ILI9341_WHITE);
+        
+        if (collided_r >= 0 && collided_c >= 0) {
+            drawBrick(collided_r, collided_c);
+        }
+        if (redraw_header) {
+            drawHeader();
+            redraw_header = false;
+        }
 
 
-    if (game_finished) {
-        nextLevel();
+        if (game_finished) {
+            nextLevel();
+        }
     }
 
     delay(10);
