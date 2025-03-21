@@ -28,21 +28,36 @@
 #define DISPLAY_OK 0xCA
 
 // Game constants
-#define MAX_SPEED 3.5
+#define MAX_SPEED 5.0
+#define STARTER_SPEED 3.5
 #define MAX_LIVES 6
 #define STARTER_LIVES 3
+#define PADDLE_SPEED_DAMPEN paddle_speed_fn
+#define BRICK_INCR_AMT 5
+#define MIN_BRICK_HEIGHT 265
+#define DEFAULT_INTERVAL 10000
+#define MIN_INTERVAL 3000
+#define DELTA_INTERVAL 500
 
 // DEBUG
 #define DEBUG
 
+// ESP Globals
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 BluetoothSerial SerialBT;
+GFXcanvas1 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+// Macro functions
+float paddle_speed_fn(float speed) {
+    return sqrt(speed) * 1.8;
+}
+
 
 // Ball info
 const int radius = 3;
 float x = 30, y = 100;
 float dx = 2, dy = -2;  
-float speed = sqrt(8);
+float speed = STARTER_SPEED;
 bool ballOnPaddle = true;
 float launchAngle = 150; // Angle in degrees
 int prevEndX = -1;
@@ -54,10 +69,12 @@ int collided_r, collided_c = -1;
 const int paddleWidth = 50;
 const int paddleHeight = 5;
 int paddleX = (SCREEN_WIDTH - paddleWidth) / 2;
-const int paddleY = SCREEN_HEIGHT - 20; // 20 pixels from bottom
-const float BOUNCE_FACTOR = 1.0; // Adjust how much the angle changes
-float paddle_speed =  max(1.0, (speed)/3.0);
+const int paddleY = SCREEN_HEIGHT - 10; // 20 pixels from bottom
+const float BOUNCE_FACTOR = 0.9; // Adjust how much the angle changes
+float paddle_speed = PADDLE_SPEED_DAMPEN(speed);
 bool left = true;
+int leftbound = 5;
+int rightbound = 5;
 
 // Game info
 LevelInfo CurrentLevel;
@@ -66,6 +83,9 @@ int numLevels = sizeof(levels) / sizeof(LevelInfo);
 int points = 0;
 int lives = STARTER_LIVES;
 bool redraw_header = false;
+unsigned long lastInterval = 0;
+float interval = DEFAULT_INTERVAL; // Start with 10 seconds (10,000 ms)
+const float minInterval = MIN_INTERVAL; // Minimum interval of 5 seconds
 
 // Debug info
 int dbgline = 10;
@@ -283,29 +303,71 @@ void drawHeader() {
 }
 
 
-void drawBrick(int row, int col) {
+void drawBrick(int row, int col, bool overridecol = false, uint16_t color = ILI9341_BLACK) {
     int durability = CurrentLevel.bricks[row][col];
     if (durability > 0) {
         int bx = CurrentLevel.brickOffsetX + col * (CurrentLevel.brickWidth + CurrentLevel.brickSpacing);
         int by = CurrentLevel.brickOffsetY + row * (CurrentLevel.brickHeight + CurrentLevel.brickSpacing);
-        tft.fillRect(bx, by, CurrentLevel.brickWidth, CurrentLevel.brickHeight, getBrickColor(durability));
+
+        if (!overridecol)
+            tft.fillRect(bx, by, CurrentLevel.brickWidth, CurrentLevel.brickHeight, getBrickColor(durability));
+        else
+            tft.fillRect(bx, by, CurrentLevel.brickWidth, CurrentLevel.brickHeight, color);
     }
+}
+
+void clearBricks() {
+    for (int r = 0; r < CurrentLevel.brickRows; r++) {
+        for (int c = 0; c < CurrentLevel.brickCols; c++) {
+            drawBrick(r, c, true);
+        }
+    }
+}
+
+void drawAllBricks() {
+    for (int r = 0; r < CurrentLevel.brickRows; r++) {
+        for (int c = 0; c < CurrentLevel.brickCols; c++) {
+            drawBrick(r, c);
+        }
+    }
+}
+
+void moveBricksDown(int amount) {
+    clearBricks();
+    CurrentLevel.brickOffsetY += BRICK_INCR_AMT;
+    drawAllBricks();
 }
 
 void resetGame() {
     tft.fillScreen(ILI9341_BLACK);
     drawHeader();
+
     paddleX = (SCREEN_WIDTH - paddleWidth) / 2;
     x = paddleX + paddleWidth/2;
     y = paddleY - paddleHeight - radius-1;
     ballOnPaddle = true;
     launchAngle = getRandomInt(30, 150);
 
-    for (int r = 0; r < CurrentLevel.brickRows; r++) {
-        for (int c = 0; c < CurrentLevel.brickCols; c++) {
-            drawBrick(r, c);
-        }
-    }
+    // Increment speed
+    speed = min(speed + 0.15, MAX_SPEED);
+
+    // Normalize direction and apply new speed
+    float norm = sqrt(dx * dx + dy * dy);
+    dx = (dx / norm) * speed;
+    dy = (dy / norm) * speed;
+    paddle_speed = PADDLE_SPEED_DAMPEN(speed); 
+
+    // Reset brick movement interval
+    interval = DEFAULT_INTERVAL;
+
+    // Reset collided brick
+    collided_r = -1;
+    collided_c = -1;
+
+    drawAllBricks();
+
+    // Draw lose boundary
+    tft.drawLine(0, MIN_BRICK_HEIGHT, SCREEN_WIDTH, MIN_BRICK_HEIGHT, ILI9341_RED);
 }
 
 void nextLevel() {
@@ -315,22 +377,9 @@ void nextLevel() {
     loadLevel(currentLevel % numLevels);
     Serial.println("NEWLEVEL LOADED FROM PROGMEM...");
 
-    // Reset collided brick
-    collided_r = -1;
-    collided_c = -1;
-
     // Reset game params, draw bricks
     resetGame();
     Serial.println("GAME STATE RESET...");
-
-    // Increment speed
-    speed = min(speed + 0.15, MAX_SPEED);
-
-    // Normalize direction and apply new speed
-    float norm = sqrt(dx * dx + dy * dy);
-    dx = (dx / norm) * speed;
-    dy = (dy / norm) * speed;
-    paddle_speed = max(1.0, (speed)/3.0);
 
     // Query display status
     uint8_t status = tft.readcommand8(ILI9341_RDMODE);
@@ -369,21 +418,34 @@ void drawLaser(int x, int y) {
 }
 
 // Update paddle position (to be called in loop)
-void movePaddle(float direction) {
+void movePaddleDraw(float direction) {
     // Save the old paddle position
     int oldPaddleX = paddleX;
 
     // Update the paddle position
-    paddleX += direction * 5; // Move left or right
+    paddleX += direction; // Move left or right
     paddleX = max(0, min(SCREEN_WIDTH - paddleWidth, paddleX)); // Keep in bounds
 
     // Only redraw if the paddle has actually moved
     if (oldPaddleX != paddleX) {
         // Overdraw the old paddle with a black box
-        tft.fillRect(oldPaddleX, paddleY, paddleWidth, paddleHeight, ILI9341_BLACK);
+        if (paddleX > oldPaddleX)
+            tft.fillRect(oldPaddleX, paddleY, paddleX - oldPaddleX, paddleHeight, ILI9341_BLACK);
+        else 
+            tft.fillRect(paddleX+paddleWidth, paddleY, oldPaddleX - paddleX, paddleHeight, ILI9341_BLACK);
 
         // Draw the new paddle at the updated position
         tft.fillRect(paddleX, paddleY, paddleWidth, paddleHeight, ILI9341_WHITE);
+    }
+}
+
+void movePaddle(float direction) {
+    for (float i = 0; i < abs(direction); i++) {
+        if (direction > 0) {
+            movePaddleDraw(1);
+        } else {
+            movePaddleDraw(-1);
+        }
     }
 }
 
@@ -432,6 +494,7 @@ void launchBall() {
     dx = speed * cos(launchAngle * M_PI / 180.0);
     dy = -speed * sin(launchAngle * M_PI / 180.0);
     ballOnPaddle = false;
+    lastInterval = millis();
 }
 
 void handleInput() {
@@ -535,55 +598,20 @@ bool getRandomActiveBrick(int &row, int &col) {
     return false; // Should never reach here
 }
 
-// Function to calculate the required ball trajectory
-float calculateRequiredAngle(int targetRow, int targetCol) {
-    // Get the center of the target brick
-    int brickCenterX = CurrentLevel.brickOffsetX + targetCol * (CurrentLevel.brickWidth + CurrentLevel.brickSpacing) + CurrentLevel.brickWidth / 2;
-    int brickCenterY = CurrentLevel.brickOffsetY + targetRow * (CurrentLevel.brickHeight + CurrentLevel.brickSpacing) + CurrentLevel.brickHeight / 2;
-
-    // Calculate the difference between the ball and the brick
-    float deltaX = brickCenterX - x;
-    float deltaY = brickCenterY - y;
-
-    // Calculate the required angle (in radians)
-    float requiredAngle = atan2(deltaY, deltaX);
-
-    return requiredAngle;
-}
-
-// Function to calculate the paddle collision point
-float calculatePaddleCollisionPoint(float requiredAngle) {
-    // Calculate the ball's vertical distance to the paddle
-    float distanceToPaddle = paddleY - y;
-
-    // Calculate the horizontal distance the ball needs to travel
-    float deltaX = distanceToPaddle * tan(requiredAngle);
-
-    // Calculate the required x position on the paddle
-    float paddleCollisionX = x + deltaX;
-
-    // Ensure the collision point is within the paddle's bounds
-    paddleCollisionX = max((float)paddleX, min((float)paddleX + paddleWidth, paddleCollisionX));
-
-    return paddleCollisionX;
-}
-
-// Function to calculate the exact x position on the paddle for a guaranteed hit
-float calculateGuaranteedPaddleCollision() {
-    int targetRow, targetCol;
-
-    // Get a random active brick
-    if (!getRandomActiveBrick(targetRow, targetCol)) {
-        return -1; // No active bricks
+int getLowestActiveBrickY() {
+    // Iterate through rows from the bottom upwards
+    for (int r = CurrentLevel.brickRows - 1; r >= 0; r--) {
+        // Check if any brick in this row is active
+        for (int c = 0; c < CurrentLevel.brickCols; c++) {
+            if (CurrentLevel.bricks[r][c] > 0) {
+                // Calculate the y level for this row
+                int by = CurrentLevel.brickOffsetY + r * (CurrentLevel.brickHeight + CurrentLevel.brickSpacing);
+                return by; // Return the y level of the lowest active row
+            }
+        }
     }
-
-    // Calculate the required angle to hit the brick
-    float requiredAngle = calculateRequiredAngle(targetRow, targetCol);
-
-    // Calculate the paddle collision point
-    float paddleCollisionX = calculatePaddleCollisionPoint(requiredAngle);
-
-    return paddleCollisionX;
+    // If no active bricks are found, return -1 (or any invalid value)
+    return -1;
 }
 
 
@@ -698,6 +726,9 @@ void setup() {
 }
 
 void loop() {
+    // get current frame time to normalize to ~60hz
+    unsigned long cur_f_time = millis();
+
     if (digitalRead(BOOT_PIN) == LOW) {
         delay(200); // debounce delay
         while (digitalRead(BOOT_PIN) == LOW); // Wait for button release (freeze)
@@ -721,20 +752,34 @@ void loop() {
     // TODO: Remove
     if (!ballOnPaddle) {
         int paddleMid = paddleX + paddleWidth/2;
-        int leftbound = 5;
-        int rightbound = 5;
-        float speedjiggle = getRandomFloat(-0.25, 0.25);
 
-        if (paddleX + leftbound > x) {
-            movePaddle(-paddle_speed-speedjiggle);
-        } else if (paddleX + paddleWidth - rightbound < x) {
-            movePaddle(paddle_speed+speedjiggle);
-        } else if (paddleMid + rightbound >= x && paddleMid - leftbound <= x && left) {
-            movePaddle(-paddle_speed-speedjiggle);
-            left = false;
-        } else if (paddleMid + rightbound >= x && paddleMid - leftbound <= x && !left) {
-            movePaddle(paddle_speed+speedjiggle);
-            left = true;
+        if (paddleX + leftbound > x) { // Ball left of paddle, move left
+            movePaddle(-paddle_speed);
+        } else if (paddleX + paddleWidth - rightbound < x) { // Ball right of paddle, move right
+            movePaddle(paddle_speed);
+        } else if (paddleMid - leftbound <= x && paddleMid + rightbound >= x && left) { // Ball centered on paddle, move left
+            if(dx < 0)
+                movePaddle(-paddle_speed);
+        } else if (paddleMid + rightbound >= x && paddleMid - leftbound <= x && !left) { // Ball centered on paddle, move right
+            if (dx > 0)
+                movePaddle(paddle_speed);
+        } else { // Ball over left mid or right mid, match ball speed, reroll bounds
+            if (x < paddleMid - leftbound) {
+                leftbound = getRandomInt(6, 10);
+                // while (paddleX + leftbound > x || paddleMid - leftbound <= x) 
+                //     leftbound = getRandomInt(6, 10);
+            }
+            else if (x > paddleMid + rightbound) {
+                rightbound = getRandomInt(6, 10);
+                // while (paddleX + paddleWidth - rightbound < x || paddleMid + rightbound >= x) 
+                //     rightbound = getRandomInt(3, 10);
+            }
+            if (dx > 0) 
+                movePaddleDraw(min(dx, paddle_speed));
+            else
+                movePaddleDraw(-min(dx, paddle_speed));
+            
+            left = !left;
         }
     }
     
@@ -763,6 +808,33 @@ void loop() {
         delay(2500);
         launchBall();
     } else {
+        unsigned long currentMillis = millis();
+
+        if (currentMillis - lastInterval >= interval) {
+            lastInterval = currentMillis; // Reset timer
+    
+            // Reduce interval by 250ms, but not below 5 seconds
+            interval = max(minInterval, interval - DELTA_INTERVAL);
+    
+            // Perform actions that should happen every interval
+            moveBricksDown(BRICK_INCR_AMT);
+
+            int lowestYRow = getLowestActiveBrickY();
+            if (lowestYRow >= MIN_BRICK_HEIGHT) { // Did lowest brick reach min height?
+                if (lives > 0) { 
+                    lives -= 1;
+                    nextLevel();
+                } else {
+                    currentLevel = -1;
+                    points = 0;
+                    lives = 3;
+    
+                    nextLevel();
+                }
+            }   
+        }
+
+
         bool game_finished = true;
         float old_x = x, old_y = y;
 
@@ -834,18 +906,20 @@ void loop() {
                                 drawBrick(r, c);
                             }
                         
-                            int overlapLeft = ballRight - brickLeft;
+                           int overlapLeft = ballRight - brickLeft;
                             int overlapRight = brickRight - ballLeft;
                             int overlapTop = ballBottom - brickTop;
                             int overlapBottom = brickBottom - ballTop;
                             int minOverlap = min(min(overlapLeft, overlapRight), min(overlapTop, overlapBottom));
 
-                            if (minOverlap == overlapLeft || minOverlap == overlapRight) {
-                                dx = -dx;
+                            if (minOverlap == overlapLeft && overlapLeft < overlapTop && overlapLeft < overlapBottom) {
+                                dx = -dx; // Bounce horizontally
+                            } else if (minOverlap == overlapRight && overlapRight < overlapTop && overlapRight < overlapBottom) {
+                                dx = -dx; // Bounce horizontally
                             } else {
-                                dy = -dy;
+                                dy = -dy; // Bounce vertically
                             }
-                            break;
+
                         } 
                         else if (oldBallRight > brickLeft && oldBallLeft < brickRight && oldBallBottom > brickTop && oldBallTop < brickBottom) {
                             collided_c = c;
@@ -860,6 +934,9 @@ void loop() {
             collided_c = -1;
             collided_r = -1;
         }
+
+        // Draw lose boundary
+        tft.drawLine(0, MIN_BRICK_HEIGHT, SCREEN_WIDTH, MIN_BRICK_HEIGHT, ILI9341_RED);
 
         // Draw ball in new location, erase in old location
         tft.fillCircle(old_x, old_y, radius, ILI9341_BLACK);
@@ -879,5 +956,8 @@ void loop() {
         }
     }
 
-    delay(10);
+    // Enforce ~60hz
+    unsigned long f_complete_time = millis() - cur_f_time;
+    if (f_complete_time < 16)
+        delay(16 - f_complete_time);
 }
