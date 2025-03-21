@@ -28,11 +28,12 @@
 #define DISPLAY_OK 0xCA
 
 // Game constants
-#define MAX_SPEED 5.0
+#define MAX_SPEED 7.0
 #define STARTER_SPEED 3.5
 #define MAX_LIVES 6
 #define STARTER_LIVES 3
 #define PADDLE_SPEED_DAMPEN paddle_speed_fn
+#define PADDLE_SPEED_CONST_MUL 1.45
 #define BRICK_INCR_AMT 5
 #define MIN_BRICK_HEIGHT 265
 #define DEFAULT_INTERVAL 10000
@@ -49,7 +50,7 @@ GFXcanvas1 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
 
 // Macro functions
 float paddle_speed_fn(float speed) {
-    return sqrt(speed) * 1.8;
+    return sqrt(speed) * PADDLE_SPEED_CONST_MUL;
 }
 
 
@@ -62,19 +63,19 @@ bool ballOnPaddle = true;
 float launchAngle = 150; // Angle in degrees
 int prevEndX = -1;
 int prevEndY = -1;
-
 int collided_r, collided_c = -1;
 
 // Paddle info
 const int paddleWidth = 50;
 const int paddleHeight = 5;
-int paddleX = (SCREEN_WIDTH - paddleWidth) / 2;
+float paddleX = (SCREEN_WIDTH - paddleWidth) / 2;
 const int paddleY = SCREEN_HEIGHT - 10; // 20 pixels from bottom
 const float BOUNCE_FACTOR = 0.9; // Adjust how much the angle changes
 float paddle_speed = PADDLE_SPEED_DAMPEN(speed);
 bool left = true;
 int leftbound = 5;
 int rightbound = 5;
+int target_coord = 0;
 
 // Game info
 LevelInfo CurrentLevel;
@@ -86,6 +87,7 @@ bool redraw_header = false;
 unsigned long lastInterval = 0;
 float interval = DEFAULT_INTERVAL; // Start with 10 seconds (10,000 ms)
 const float minInterval = MIN_INTERVAL; // Minimum interval of 5 seconds
+bool game_started = false;
 
 // Debug info
 int dbgline = 10;
@@ -417,22 +419,26 @@ void drawLaser(int x, int y) {
     tft.fillRoundRect(x - 10, y, 20, 6, 3, ILI9341_RED);
 }
 
+float roundToNearestHalf(float value) {
+    return round(value * 2.0f) / 2.0f;
+}
+
 // Update paddle position (to be called in loop)
 void movePaddleDraw(float direction) {
     // Save the old paddle position
-    int oldPaddleX = paddleX;
+    float oldPaddleX = paddleX;
 
     // Update the paddle position
-    paddleX += direction; // Move left or right
-    paddleX = max(0, min(SCREEN_WIDTH - paddleWidth, paddleX)); // Keep in bounds
+    paddleX += roundToNearestHalf(direction); // Move left or right
+    paddleX = max(0.0f, min((float)(SCREEN_WIDTH - paddleWidth), paddleX)); // Keep in bounds
 
     // Only redraw if the paddle has actually moved
     if (oldPaddleX != paddleX) {
         // Overdraw the old paddle with a black box
         if (paddleX > oldPaddleX)
-            tft.fillRect(oldPaddleX, paddleY, paddleX - oldPaddleX, paddleHeight, ILI9341_BLACK);
+            tft.fillRect(floor(oldPaddleX), paddleY, ceil(paddleX - oldPaddleX), paddleHeight, ILI9341_BLACK);
         else 
-            tft.fillRect(paddleX+paddleWidth, paddleY, oldPaddleX - paddleX, paddleHeight, ILI9341_BLACK);
+            tft.fillRect(floor(paddleX+paddleWidth), paddleY, ceil(oldPaddleX - paddleX), paddleHeight, ILI9341_BLACK);
 
         // Draw the new paddle at the updated position
         tft.fillRect(paddleX, paddleY, paddleWidth, paddleHeight, ILI9341_WHITE);
@@ -636,10 +642,16 @@ void setup() {
 
     screen_init = true;
     tft.fillScreen(ILI9341_BLACK);
-    digitalWrite(TFT_LED, HIGH);
-
     char msg[40];
     sprintf(msg, "DISPLAY INITIALIZATION OK (0x%X)...", status);
+    #ifdef DEBUG
+        drawdebugtext(msg);
+    #endif
+
+    delay(200);
+    digitalWrite(TFT_LED, HIGH);
+
+    sprintf(msg, "BACKLIGHT ON (D5)...");
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
@@ -740,46 +752,29 @@ void loop() {
     bool hitPaddle = false;
     tft.fillRect(paddleX, paddleY, paddleWidth, paddleHeight, ILI9341_WHITE);
 
-    if (y + radius >= paddleY && y + radius <= paddleY + paddleHeight && x >= paddleX && x <= paddleX + paddleWidth) {
-        float hitPos = (x - (paddleX + paddleWidth / 2)) / (paddleWidth / 2); // Normalize [-1, 1]
+    if (y + radius >= paddleY && y + radius <= paddleY + paddleHeight && x+radius >= paddleX && x <= paddleX + paddleWidth + radius) {
+        float hitPos = ((x + radius) - (paddleX + paddleWidth / 2)) / ((paddleWidth / 2) + radius);
 
         dx = speed * hitPos * BOUNCE_FACTOR; // Angle the bounce
         dy = -sqrt(speed * speed - dx * dx); // Adjust dy to preserve total speed
 
         hitPaddle = true;
+
+        target_coord = getRandomInt(2*radius, paddleWidth-2*radius); // Where on the paddle to hit next?
     }
 
     // TODO: Remove
-    if (!ballOnPaddle) {
-        int paddleMid = paddleX + paddleWidth/2;
-
-        if (paddleX + leftbound > x) { // Ball left of paddle, move left
-            movePaddle(-paddle_speed);
-        } else if (paddleX + paddleWidth - rightbound < x) { // Ball right of paddle, move right
-            movePaddle(paddle_speed);
-        } else if (paddleMid - leftbound <= x && paddleMid + rightbound >= x && left) { // Ball centered on paddle, move left
-            if(dx < 0)
-                movePaddle(-paddle_speed);
-        } else if (paddleMid + rightbound >= x && paddleMid - leftbound <= x && !left) { // Ball centered on paddle, move right
+    if (!ballOnPaddle && dy > 0) {
+        int padding = radius;
+        if(x < paddleX + target_coord - padding) {
+            movePaddleDraw(-paddle_speed);
+        } else if (x > paddleX + target_coord + padding) {
+            movePaddleDraw(paddle_speed);
+        } else {
             if (dx > 0)
-                movePaddle(paddle_speed);
-        } else { // Ball over left mid or right mid, match ball speed, reroll bounds
-            if (x < paddleMid - leftbound) {
-                leftbound = getRandomInt(6, 10);
-                // while (paddleX + leftbound > x || paddleMid - leftbound <= x) 
-                //     leftbound = getRandomInt(6, 10);
-            }
-            else if (x > paddleMid + rightbound) {
-                rightbound = getRandomInt(6, 10);
-                // while (paddleX + paddleWidth - rightbound < x || paddleMid + rightbound >= x) 
-                //     rightbound = getRandomInt(3, 10);
-            }
-            if (dx > 0) 
                 movePaddleDraw(min(dx, paddle_speed));
             else
-                movePaddleDraw(-min(dx, paddle_speed));
-            
-            left = !left;
+                movePaddleDraw(max(dx, -paddle_speed));
         }
     }
     
@@ -828,6 +823,7 @@ void loop() {
                     currentLevel = -1;
                     points = 0;
                     lives = 3;
+                    speed = STARTER_SPEED;
     
                     nextLevel();
                 }
@@ -852,6 +848,7 @@ void loop() {
                 currentLevel = -1;
                 points = 0;
                 lives = 3;
+                speed = STARTER_SPEED;
 
                 nextLevel();
             }
