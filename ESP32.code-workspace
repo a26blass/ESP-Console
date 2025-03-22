@@ -14,7 +14,9 @@
 	],
 	"settings": {
 		"files.associations": {
-			"cmath": "cpp"
+			"cmath": "cpp",
+			"random": "cpp",
+			"xiosbase": "cpp"
 		}
 	}
 }
