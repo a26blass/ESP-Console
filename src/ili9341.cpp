@@ -7,6 +7,7 @@
 #include "ball.h"
 #include "game.h"
 
+
 // Globals
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 GFXcanvas1 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -168,6 +169,23 @@ void drawloadtext() {
 
     tft.setCursor(x, y);
     tft.print("LOADING...");
+}
+
+void draw_start_text() {
+    tft.setTextColor(ILI9341_WHITE); // Set text color to white
+    tft.setTextSize(2); // Text size 2
+
+    int charWidth = 6 * 2; // Each character is 12 pixels wide
+    int charHeight = 8 * 2; // Each character is 16 pixels tall
+    int textLength = 11; // "LOADING..." has 10 characters
+    int textWidth = textLength * charWidth;
+    int textHeight = charHeight;
+    
+    int x = (240 - textWidth) / 2;
+    int y = (320 - textHeight) / 2;
+
+    tft.setCursor(x, y);
+    tft.print("PRESS START");
 }
 
 void draw_header() {
@@ -339,33 +357,9 @@ void display_init() {
     dbginfo.dbg_line = 10;
 
     pinMode(TFT_LED, OUTPUT);
-    
     tft.begin(); // Display init
-
-    // Query display status
-    uint8_t status = tft.readcommand8(ILI9341_RDMODE);
-    Serial.print("DISPLAY INIT... STATUS = 0x");
-    Serial.println(status, HEX);
-
-    if (status != DISPLAY_OK) {
-        Serial.println("DISPLAY INITIALIZATION FAIL, ABORTING...");
-        delay(3000);
-        esp_system_abort("DISPLAY INIT FAIL");
-    }
-
-    dbginfo.screen_init = true;
     tft.fillScreen(ILI9341_BLACK);
-    char msg[40];
-    sprintf(msg, "DISPLAY INITIALIZATION OK (0x%X)...", status);
-    #ifdef DEBUG
-        drawdebugtext(msg);
-    #endif
 
     delay(200);
     digitalWrite(TFT_LED, HIGH);
-
-    sprintf(msg, "BACKLIGHT ON (D5)...");
-    #ifdef DEBUG
-        drawdebugtext(msg);
-    #endif
 }

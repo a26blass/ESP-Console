@@ -1,7 +1,7 @@
 
 // Paddle Constants
 #define PADDLE_SPEED_DAMPEN paddle_speed_fn
-#define PADDLE_SPEED_CONST_MUL 1.45
+#define PADDLE_SPEED_CONST_MUL 1.6
 #define BOUNCE_FACTOR 0.9
 
 #ifndef PADDLE_H

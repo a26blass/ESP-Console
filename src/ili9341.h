@@ -39,6 +39,7 @@ void draw_paddle();
 void draw_launch_angle_indicator();
 void draw_loss_boundary();
 void drawloadtext();
+void draw_start_text();
 void movePaddleDraw(float direction);
 void movePaddle(float direction);
 void display_init();

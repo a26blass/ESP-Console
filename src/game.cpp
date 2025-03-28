@@ -7,7 +7,6 @@
 #include "util.h"
 #include "debug.h"
 
-
 game_t game = {
     .current_level = {},  // Assuming LevelInfo has a default constructor or initialization
     .current_level_index = 0,
@@ -26,8 +25,11 @@ game_t *get_game_info() {
     return &game;
 }
 
-void load_level(int levelIndex) {
-    drawloadtext();
+void load_level(int levelIndex, bool use_load_screen) {
+    start_blinking();
+
+    if(use_load_screen)
+        drawloadtext();
     delay(200);
     // Load the level from PROGMEM
     memcpy_P(&game.current_level, &levels[levelIndex], sizeof(LevelInfo));
@@ -40,10 +42,13 @@ void load_level(int levelIndex) {
     int spacing = game.current_level.brickSpacing;
     game.current_level.brickOffsetX = (SCREEN_WIDTH - (numCols * (width + spacing)))/2;
     game.current_level.brickOffsetY = HEADER_HEIGHT + TOP_BUFFER;
+
+    stop_blinking();
 }
 
-void resetGame() {
-    black_screen();
+void resetGame(bool use_load_screen) {
+    if (use_load_screen)
+        black_screen();
     draw_header();
 
     paddle_t *p_info = get_paddle_info();
@@ -77,21 +82,26 @@ void resetGame() {
 }
 
 
-void next_level() {
-    black_screen();
+void next_level(bool use_load_screen) {
+    if (use_load_screen)
+        black_screen();
 
     // Load next level from memory
     game.current_level_index = (game.current_level_index + 1);
-    load_level(game.current_level_index % game.num_levels);
+    load_level(game.current_level_index % game.num_levels, false);
     Serial.println("NEWLEVEL LOADED FROM PROGMEM...");
 
     // Reset game params, draw bricks
-    resetGame();
+    resetGame(use_load_screen);
     Serial.println("GAME STATE RESET...");
 
     query_display_status();
 
     Serial.println("OK!");
+
+    // Draw 'Loading...' if game not started
+    if (!game.game_started)
+        draw_start_text();
 
     Serial.println("NEWLEVEL BEGIN...");
 }
@@ -129,22 +139,27 @@ void start_game() {
     game.lives = 3;
     b_info->speed = STARTER_SPEED;
 
-    next_level();
+    // Black screen before AI game
+    black_screen();
+
+    uint32_t cur_time = millis();
+    
+    while(millis() - cur_time < 5000 && digitalRead(BOOT_PIN) == HIGH) {
+        draw_start_text();
+    }
+
+    next_level(false);
 }
 
-void game_loop() {
+void game_cycle() {
     ball_t *b_info = get_ball_info();
     paddle_t *p_info = get_paddle_info();
 
     game.game_finished = false;
-
-    if (digitalRead(BOOT_PIN) == LOW) {
-        delay(200); // debounce delay
-        while (digitalRead(BOOT_PIN) == LOW); // Wait for button release (freeze)
-        next_level(); // Move to next level
-    }
     
-    incr_paddle_auto();
+    if(!game.game_started) {
+        incr_paddle_auto();
+    }
     
     // Ball logic
 
@@ -156,25 +171,26 @@ void game_loop() {
         if (currentMillis - game.last_interval >= game.interval) {
             game.last_interval = currentMillis; // Reset timer
     
-            // Reduce interval by 250ms, but not below 5 seconds
+            // Reduce interval by 250ms, but not below 3 seconds
             game.interval = max(game.min_interval, game.interval - DELTA_INTERVAL);
     
             // Perform actions that should happen every interval
             move_bricks_down(BRICK_INCR_AMT);
 
             int lowestYRow = getLowestActiveBrickY();
-            if (lowestYRow >= MIN_BRICK_HEIGHT) { // Did lowest brick reach min height?
+            if (lowestYRow + game.current_level.brickHeight >= MIN_BRICK_HEIGHT) { // Did lowest brick reach min height?
                 if (game.lives > 0) { 
                     game.lives -= 1;
-                    next_level();
+                    next_level(true);
                 } else {
                     game.current_level_index = -1;
                     game.points = 0;
                     game.lives = 3;
                     b_info->speed = STARTER_SPEED;
     
-                    next_level();
+                    next_level(true);
                 }
+                return;
             }   
         }
         
@@ -189,7 +205,7 @@ void game_loop() {
         // Draw ball in new location, erase in old location
         draw_ball(b_info->x, b_info->y, old_x, old_y, b_info->radius);
         
-        if (b_info->collided_r >= 0 && b_info->collided_c >= 0) {
+        if (b_info->collided_r >= 0 && b_info->collided_c >= 0 && game.current_level.bricks[b_info->collided_r][b_info->collided_c] != 0) {
             draw_brick(b_info->collided_r, b_info->collided_c);
         }
         
@@ -199,7 +215,9 @@ void game_loop() {
         }
 
         if (game.game_finished) {
-            next_level();
+            next_level(true);
+        } else if (!game.game_started) {
+            draw_start_text();
         }
     }
 }

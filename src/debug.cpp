@@ -4,6 +4,7 @@
 #include "ili9341.h"
 #include "esp_system.h"
 #include "esp_task_wdt.h"
+#include "esp_log.h"
 
 
 // Debug struct
@@ -12,8 +13,39 @@ debug_t debug = {
     .screen_init = false,
 };
 
+// Async task handler
+TaskHandle_t led_task_handle = NULL; // Handle for LED task
+
+// LED tasks
+void blink_LED(void *parameter) {
+    while (1) {
+        digitalWrite(LED_PIN, !digitalRead(LED_PIN));  // Toggle LED
+        vTaskDelay(pdMS_TO_TICKS(LED_FLASH_INTERVAL));  // delay 
+    }
+}
+
+void start_blinking() {
+    if (led_task_handle == NULL) {
+        xTaskCreate(blink_LED, "LED Task", 1024, NULL, 1, &led_task_handle);
+    }
+}
+
+void stop_blinking() {
+    if (led_task_handle != NULL) {
+        vTaskDelete(led_task_handle);  // Kill the task
+        led_task_handle = NULL;
+        digitalWrite(LED_PIN, LOW);  // Ensure LED is off
+    }
+}
+
+
 // Panic Handler
 extern "C" void __wrap_esp_panic_handler(void *frame) {
+    esp_task_wdt_deinit();
+    for (int i = 0; i < 32; i++)
+        esp_intr_disable_source(i);
+    
+
     // Cast frame to a CPU context structure
     XtExcFrame *exc_frame = (XtExcFrame *)frame;
 
@@ -45,18 +77,14 @@ extern "C" void __wrap_esp_panic_handler(void *frame) {
     ESP_LOGE("PANIC", "PS        (Processor State)  : 0x%08X", ps);
     ESP_LOGE("PANIC", "SAR       (Shift Amount)     : 0x%08X", sar);
         
-    Serial.println("KERNEL PANIC");
-
-    // Optional: Trigger watchdog to reset
-    esp_task_wdt_init(1, true);
-    esp_task_wdt_add(NULL);
     
     // Wait for logs to be flushed before restarting
-    vTaskDelay(pdMS_TO_TICKS(20000));  // Give 5 seconds for logs to be read
 
     #ifndef DEBUG
         esp_restart();
     #endif
+
+    
 }
 
 const char* chip_model_to_string(esp_chip_model_t chip_model) {
@@ -116,16 +144,61 @@ void query_display_status() {
     }
 }
 
+void dbg_write_line(const char *line) {
+    Serial.println(line);
+    #ifdef DEBUG
+        drawdebugtext(line);
+    #endif
+}
+
+void debug_delay_ms(int ms) {
+    #ifdef DEBUG
+        delay(ms);
+    #endif
+}
+
 void debug_init() {
+    #ifdef DEBUG
+        esp_log_level_set("BOOT", ESP_LOG_INFO);
+    #endif
+
+    char msg[40];
+
     // Setup pins / serial
     Serial.begin(9600);
-    pinMode(BOOT_PIN, INPUT_PULLUP); // Debug : Next Level
+
+    // Setup Debug LED
+    pinMode(LED_PIN, OUTPUT);
+
+    uint8_t status = get_display_status();
+    if (status != DISPLAY_OK) {
+        ESP_LOGE("BOOT FAIL", "DISPLAY INITIALIZATION FAIL, ABORTING...");
+        esp_system_abort("DISPLAY INIT FAIL");
+    }
+
+    sprintf(msg, "DISPLAY INITIALIZATION OK (0x%X)...", status);
+    ESP_LOGI("BOOT", msg);
+    #ifdef DEBUG
+        drawdebugtext(msg);
+    #endif
     
-    char msg[40];
+    if (digitalRead(5) == HIGH) {
+        sprintf(msg, "BACKLIGHT ON (D5)...");
+        ESP_LOGI("BOOT", msg);
+        #ifdef DEBUG
+        drawdebugtext(msg);
+        #endif
+    } else {
+        ESP_LOGE("BOOT FAIL", "BACKLIGHT FAILED TO ENABLE, ABORTING...");
+        esp_system_abort("BACKLIGHT FAILED TO ENABLE, ABORTING...");
+    }
+    
+    debug.screen_init = true;
+    
     esp_chip_info_t c_info;
     esp_chip_info(&c_info);
     sprintf(msg, "CPU MODEL %s (%d CORES)...", chip_model_to_string(c_info.model), c_info.cores);
-    Serial.println(msg);
+    ESP_LOGI("BOOT", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
@@ -137,30 +210,29 @@ void debug_init() {
     bool flash = (c_info.features & CHIP_FEATURE_EMB_FLASH) != 0;
     bool psram = (c_info.features & CHIP_FEATURE_EMB_PSRAM) != 0;
     sprintf(msg, "BLU: %d | BLE : %d | IEEE802154 : %d", blu, ble, w_support);
-    Serial.println(msg);
+    ESP_LOGI("BOOT", msg);
     #ifdef DEBUG
         drawdebugtext("FEATURE FLAGS:");
         drawdebugtext(msg);
     #endif
     sprintf(msg, "W_BGN: %d | FLASH : %d | PSRAM : %d", wifi_bgn, flash, psram);
-    Serial.println(msg);
+    ESP_LOGI("BOOT", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
 
     esp_reset_reason_t reset_reason = esp_reset_reason();
     sprintf(msg, "RESET REASON: %s", reset_reason_to_string(reset_reason));
-    Serial.println(msg);
+    ESP_LOGI("BOOT", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
 
     if (!Serial) {
-        Serial.println("SERIAL1 NOT INITIALIZED...");
+        ESP_LOGE("BOOT FAIL", "SERIAL1 NOT INITIALIZED...");
         #ifdef DEBUG
             drawdebugtext("SERIAL1 NOT INITIALIZED...");
         #endif
-        delay(3000);
         esp_system_abort("SERIAL INIT FAIL");
     }
 
@@ -169,20 +241,20 @@ void debug_init() {
     #endif
 
     sprintf(msg, "FREE HEAP MEMORY: %dB (%dKB)", esp_get_free_heap_size(), esp_get_free_heap_size()/1000);
-    Serial.println(msg);
+    ESP_LOGI("BOOT", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
 
     UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(NULL);
     sprintf(msg, "FREE STACK MEMORY: %dB (%dKB)", stack_remaining, stack_remaining/1000);
-    Serial.println(msg);
+    ESP_LOGI("BOOT", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
 
     sprintf(msg, "ESP IDF %s", esp_get_idf_version());
-    Serial.println(msg);
+    ESP_LOGI("BOOT", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif  
@@ -195,7 +267,6 @@ void debug_init() {
 
     #ifdef DEBUG
         drawdebugtext("STARTING LEVEL...");
-        delay(1000);
     #endif
 
     debug.setup_complete = true;  

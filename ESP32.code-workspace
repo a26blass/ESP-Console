@@ -16,7 +16,8 @@
 		"files.associations": {
 			"cmath": "cpp",
 			"random": "cpp",
-			"xiosbase": "cpp"
+			"xiosbase": "cpp",
+			"queue": "cpp"
 		}
 	}
 }

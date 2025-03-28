@@ -4,6 +4,7 @@
 #include "ili9341.h"
 #include "game.h"
 #include "util.h"
+#include "inputs.h"
 
 ball_t ball = {
     .radius = 3,
@@ -11,6 +12,7 @@ ball_t ball = {
     .dx = 2, .dy = -2,
     .speed = STARTER_SPEED,
     .ball_on_paddle = true,
+    .hit_paddle = false,
     .launch_angle = 150,
     .prev_end_x = -1,
     .prev_end_y = -1,
@@ -45,11 +47,14 @@ void launch_ball_auto() {
     }
 
     draw_launch_angle_indicator();
-
     draw_ball(ball.x, ball.y, ball.x, ball.y, ball.radius);
     
-    
-    delay(2500);
+    for (int i = 0; i < 2500; i++) {
+        if (debug_input_check())
+            break;
+        delay(1);
+    }
+
     launch_ball();
 }
 
@@ -66,7 +71,7 @@ void ball_collision() {
     if (ball.x + ball.radius >= SCREEN_WIDTH && ball.dx > 0) ball.dx = -ball.dx;
     if (ball.y - ball.radius <= 15 && ball.dy < 0) ball.dy = -ball.dy;
     if (old_y - ball.radius <= 15) g_info->redraw_header = true; // bouncing off top header may cause ball shadow to erase it
-    if (ball.y + ball.radius >= SCREEN_HEIGHT && ball.dy > 0) {
+    if (ball.y + ball.radius >= SCREEN_HEIGHT && ball.dy > 0 && !ball.hit_paddle) {
         if (g_info->lives > 0) {
             g_info->lives -= 1;
         } else {
@@ -84,75 +89,75 @@ void ball_collision() {
 
         ball.ball_on_paddle = true;
     }
+    int brickOffsetY = g_info->current_level.brickOffsetY;
+    int brickRows = g_info->current_level.brickRows;
+    int brickSpacing = g_info->current_level.brickSpacing;
+    int brickHeight = g_info->current_level.brickHeight;
 
-    if (ball.y + ball.radius >= g_info->current_level.brickOffsetY) {
-        for (int r = 0; r < g_info->current_level.brickRows; r++) {
-            for (int c = 0; c < g_info->current_level.brickCols; c++) {
-                if (g_info->current_level.bricks[r][c] > 0) {
-                    int bx = g_info->current_level.brickOffsetX + c * (g_info->current_level.brickWidth + g_info->current_level.brickSpacing);
-                    int by = g_info->current_level.brickOffsetY + r * (g_info->current_level.brickHeight + g_info->current_level.brickSpacing);
+    
+    for (int r = 0; r < g_info->current_level.brickRows; r++) {
+        for (int c = 0; c < g_info->current_level.brickCols; c++) {
+            if (g_info->current_level.bricks[r][c] > 0) {
+                int bx = g_info->current_level.brickOffsetX + c * (g_info->current_level.brickWidth + g_info->current_level.brickSpacing);
+                int by = g_info->current_level.brickOffsetY + r * (g_info->current_level.brickHeight + g_info->current_level.brickSpacing);
 
-                    int ballLeft = ball.x - ball.radius;
-                    int ballRight = ball.x + ball.radius;
-                    int oldBallLeft = old_x - ball.radius;
-                    int oldBallRight = old_x + ball.radius;
-                    int ballTop = ball.y - ball.radius;
-                    int ballBottom = ball.y + ball.radius;
-                    int oldBallTop = old_y - ball.radius;
-                    int oldBallBottom = old_y + ball.radius;
-                    int brickLeft = bx;
-                    int brickRight = bx + g_info->current_level.brickWidth;
-                    int brickTop = by;
-                    int brickBottom = by + g_info->current_level.brickHeight;
+                int ballLeft = ball.x - ball.radius;
+                int ballRight = ball.x + ball.radius;
+                int oldBallLeft = old_x - ball.radius;
+                int oldBallRight = old_x + ball.radius;
+                int ballTop = ball.y - ball.radius;
+                int ballBottom = ball.y + ball.radius;
+                int oldBallTop = old_y - ball.radius;
+                int oldBallBottom = old_y + ball.radius;
+                int brickLeft = bx;
+                int brickRight = bx + g_info->current_level.brickWidth;
+                int brickTop = by;
+                int brickBottom = by + g_info->current_level.brickHeight;
 
-                    bool collisionX = (oldBallRight <= brickLeft && ballRight >= brickLeft) || 
-                                    (oldBallLeft >= brickRight && ballLeft <= brickRight);
+                bool collisionX = (oldBallRight <= brickLeft && ballRight >= brickLeft) || 
+                                (oldBallLeft >= brickRight && ballLeft <= brickRight);
 
-                    bool collisionY = (oldBallBottom <= brickTop && ballBottom >= brickTop) || 
-                                    (oldBallTop >= brickBottom && ballTop <= brickBottom);
+                bool collisionY = (oldBallBottom <= brickTop && ballBottom >= brickTop) || 
+                                (oldBallTop >= brickBottom && ballTop <= brickBottom);
 
-                    if ((ballRight > brickLeft && ballLeft < brickRight && 
-                        ballBottom > brickTop && ballTop < brickBottom) ||
-                        (collisionX && ballBottom > brickTop && ballTop < brickBottom) ||
-                        (collisionY && ballRight > brickLeft && ballLeft < brickRight)) {
-                        ball.collided_c = c;
-                        ball.collided_r = r;  
-                        g_info->current_level.bricks[r][c]--;
-                        if (g_info->current_level.bricks[r][c] <= 0) {
-                            g_info->game_finished = check_game_finished();
-                            draw_brick(r, c, true, ILI9341_BLACK);
-                            g_info->points += 10;
-                            draw_header();
-                        } else {
-                            g_info->game_finished = false;
-                            draw_brick(r, c);
-                        }
-                    
-                        int overlapLeft = ballRight - brickLeft;
-                        int overlapRight = brickRight - ballLeft;
-                        int overlapTop = ballBottom - brickTop;
-                        int overlapBottom = brickBottom - ballTop;
-                        int minOverlap = min(min(overlapLeft, overlapRight), min(overlapTop, overlapBottom));
-
-                        if (minOverlap == overlapLeft && overlapLeft < overlapTop && overlapLeft < overlapBottom) {
-                            ball.dx = -ball.dx; // Bounce horizontally
-                        } else if (minOverlap == overlapRight && overlapRight < overlapTop && overlapRight < overlapBottom) {
-                            ball.dx = -ball.dx; // Bounce horizontally
-                        } else {
-                            ball.dy = -ball.dy; // Bounce vertically
-                        }
-
-                    } 
-                    else if (oldBallRight > brickLeft && oldBallLeft < brickRight && oldBallBottom > brickTop && oldBallTop < brickBottom) {
-                        ball.collided_c = c;
-                        ball.collided_r = r;   
+                if ((ballRight > brickLeft && ballLeft < brickRight && 
+                    ballBottom > brickTop && ballTop < brickBottom) ||
+                    (collisionX && ballBottom > brickTop && ballTop < brickBottom) ||
+                    (collisionY && ballRight > brickLeft && ballLeft < brickRight)) {
+                    ball.collided_c = c;
+                    ball.collided_r = r;  
+                    g_info->current_level.bricks[r][c]--;
+                    if (g_info->current_level.bricks[r][c] <= 0) {
+                        g_info->game_finished = check_game_finished();
+                        draw_brick(r, c, true, ILI9341_BLACK);
+                        g_info->points += 10;
+                        draw_header();
+                    } else {
+                        g_info->game_finished = false;
+                        draw_brick(r, c);
                     }
+                
+                    int overlapLeft = ballRight - brickLeft;
+                    int overlapRight = brickRight - ballLeft;
+                    int overlapTop = ballBottom - brickTop;
+                    int overlapBottom = brickBottom - ballTop;
+                    int minOverlap = min(min(overlapLeft, overlapRight), min(overlapTop, overlapBottom));
+
+                    if (overlapLeft < overlapRight && overlapLeft < overlapTop && overlapLeft < overlapBottom) {
+                        if (ball.dx > 0) ball.dx = -ball.dx; // Ball was moving right
+                    } else if (overlapRight < overlapLeft && overlapRight < overlapTop && overlapRight < overlapBottom) {
+                        if (ball.dx < 0) ball.dx = -ball.dx; // Ball was moving left
+                    } else if (overlapTop < overlapBottom) {
+                        if (ball.dy > 0) ball.dy = -ball.dy; // Ball was moving down
+                    } else {
+                        if (ball.dy < 0) ball.dy = -ball.dy; // Ball was moving up
+                    }
+                } 
+                else if (oldBallRight > brickLeft && oldBallLeft < brickRight && oldBallBottom > brickTop && oldBallTop < brickBottom) {
+                    ball.collided_c = c;
+                    ball.collided_r = r;   
                 }
             }
         }
-    } else {
-        g_info->game_finished = false;
-        ball.collided_c = -1;
-        ball.collided_r = -1;
     }
 }

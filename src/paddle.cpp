@@ -37,7 +37,10 @@ void handle_collision() {
         b_info->dx = b_info->speed * hitPos * BOUNCE_FACTOR; // Angle the bounce
         b_info->dy = -sqrt(b_info->speed * b_info->speed - b_info->dx * b_info->dx); // Adjust dy to preserve total speed
 
-        paddle.target_coord = getRandomInt(2*b_info->radius, paddle.paddle_width-2*b_info->radius); // Where on the paddle to hit next?
+        paddle.target_coord = getRandomInt(3*b_info->radius, paddle.paddle_width-3*b_info->radius); // Where on the paddle to hit next?
+        b_info->hit_paddle = true;
+    } else {
+        b_info->hit_paddle = false;
     }
 }
 

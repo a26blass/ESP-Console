@@ -10,6 +10,7 @@ typedef struct {
     float dx, dy;
     float speed;
     bool ball_on_paddle;
+    bool hit_paddle;
     float launch_angle;
     int prev_end_x;
     int prev_end_y;
