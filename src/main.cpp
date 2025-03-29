@@ -8,8 +8,8 @@
 void setup() {
 
     start_blinking();
-    display_init();   // Initialize the display and backlight
     debug_init();     // Initialize debug structs & check status
+    display_init();   // Initialize the display and backlight
     inputs_init();    // Initialize inputs
     debug_delay_ms(); // Delay if debug mode is enabled
     stop_blinking();
