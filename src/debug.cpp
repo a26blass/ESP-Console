@@ -138,7 +138,7 @@ void query_display_status() {
     Serial.print("DISPLAY CHECK... STATUS = 0x");
     Serial.println(status, HEX);
 
-    if (status != DISPLAY_OK) {
+    if (!DISPLAY_OK) {
         Serial.println("DISPLAY CHECK FAIL, ABORTING...");
         esp_system_abort("DISPLAY CHECK FAIL");
     }
@@ -158,20 +158,21 @@ void debug_delay_ms(int ms) {
 }
 
 void debug_init() {
+    // Setup pins / serial
+    Serial.begin(9600);
+
     #ifdef DEBUG
         esp_log_level_set("BOOT", ESP_LOG_INFO);
     #endif
 
     char msg[40];
 
-    // Setup pins / serial
-    Serial.begin(9600);
 
     // Setup Debug LED
     pinMode(LED_PIN, OUTPUT);
 
     uint8_t status = get_display_status();
-    if (status != DISPLAY_OK) {
+    if (!DISPLAY_OK) {
         ESP_LOGE("BOOT FAIL", "DISPLAY INITIALIZATION FAIL, ABORTING...");
         esp_system_abort("DISPLAY INIT FAIL");
     }
@@ -270,4 +271,6 @@ void debug_init() {
     #endif
 
     debug.setup_complete = true;  
+
+    vTaskDelay(pdMS_TO_TICKS(1000)); // Wait for logs to be printed
 }

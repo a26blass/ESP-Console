@@ -12,7 +12,7 @@
 #define SCREEN_HEIGHT 320
 #define HEADER_HEIGHT 15
 #define TOP_BUFFER 15
-#define DISPLAY_OK 0xCA
+#define DISPLAY_OK status & (1 << 10)
 
 #ifndef DISPLAY_H
 #define DISPLAY_H
