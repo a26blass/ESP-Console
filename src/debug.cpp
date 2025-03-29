@@ -167,20 +167,6 @@ void debug_init() {
     // Setup pins / serial
     Serial.begin(9600);
 
-    // Setup Debug LED
-    pinMode(LED_PIN, OUTPUT);
-
-    uint8_t status = get_display_status();
-    if (status != DISPLAY_OK) {
-        ESP_LOGE("BOOT FAIL", "DISPLAY INITIALIZATION FAIL, ABORTING...");
-        esp_system_abort("DISPLAY INIT FAIL");
-    }
-
-    sprintf(msg, "DISPLAY INITIALIZATION OK (0x%X)...", status);
-    ESP_LOGI("BOOT", msg);
-    #ifdef DEBUG
-        drawdebugtext(msg);
-    #endif
     
     if (digitalRead(5) == HIGH) {
         sprintf(msg, "BACKLIGHT ON (D5)...");
@@ -227,6 +213,11 @@ void debug_init() {
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
+
+    if (reset_reason == ESP_RST_BROWNOUT) {
+        ESP_LOGE("BOOT FAIL", "BROWNOUT DETECTED, ENTERING DEEP SLEEP...");
+        esp_deep_sleep_start();
+    }
 
     if (!Serial) {
         ESP_LOGE("BOOT FAIL", "SERIAL1 NOT INITIALIZED...");

@@ -6,6 +6,7 @@
 #include "paddle.h"
 #include "ball.h"
 #include "game.h"
+#include "debug.h"
 
 
 // Globals
@@ -355,6 +356,23 @@ void drawLaser(int x, int y) {
 // --- INIT ---
 void display_init() {
     dbginfo.dbg_line = 10;
+    
+    char msg[40];
+
+    // Setup Debug LED
+    pinMode(LED_PIN, OUTPUT);
+
+    uint8_t status = get_display_status();
+    if (status != DISPLAY_OK) {
+        ESP_LOGE("BOOT FAIL", "DISPLAY INITIALIZATION FAIL, ABORTING...");
+        esp_system_abort("DISPLAY INIT FAIL");
+    }
+
+    sprintf(msg, "DISPLAY INITIALIZATION OK (0x%X)...", status);
+    ESP_LOGI("BOOT", msg);
+    #ifdef DEBUG
+        drawdebugtext(msg);
+    #endif
 
     pinMode(TFT_LED, OUTPUT);
     tft.begin(); // Display init
