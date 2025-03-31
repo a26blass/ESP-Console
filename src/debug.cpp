@@ -158,27 +158,12 @@ void debug_delay_ms(int ms) {
 }
 
 void debug_init() {
-    // Setup pins / serial
-    Serial.begin(9600);
-
     #ifdef DEBUG
         esp_log_level_set("BOOT", ESP_LOG_INFO);
     #endif
 
+
     char msg[40];
-
-
-    
-    if (digitalRead(5) == HIGH) {
-        sprintf(msg, "BACKLIGHT ON (D5)...");
-        ESP_LOGI("BOOT", msg);
-        #ifdef DEBUG
-        drawdebugtext(msg);
-        #endif
-    } else {
-        ESP_LOGE("BOOT FAIL", "BACKLIGHT FAILED TO ENABLE, ABORTING...");
-        esp_system_abort("BACKLIGHT FAILED TO ENABLE, ABORTING...");
-    }
     
     debug.screen_init = true;
     
@@ -214,11 +199,6 @@ void debug_init() {
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
-
-    if (reset_reason == ESP_RST_BROWNOUT) {
-        ESP_LOGE("BOOT FAIL", "BROWNOUT DETECTED, ENTERING DEEP SLEEP...");
-        esp_deep_sleep_start();
-    }
 
     if (!Serial) {
         ESP_LOGE("BOOT FAIL", "SERIAL1 NOT INITIALIZED...");

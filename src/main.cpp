@@ -4,14 +4,19 @@
 #include "game.h"
 #include "inputs.h"
 #include "util.h"
+#include "system.h"
 
 void setup() {
-
+    
+    pinMode(LED_PIN, OUTPUT); // Setup Debug LED
     start_blinking();
-    debug_init();     // Initialize debug structs & check status
+
+    system_init();    // Initialize the system, can abort boot
     display_init();   // Initialize the display and backlight
+    debug_init();     // Initialize debug structs & check status
     inputs_init();    // Initialize inputs
     debug_delay_ms(); // Delay if debug mode is enabled
+    
     stop_blinking();
 
     start_game();     // Begin the game

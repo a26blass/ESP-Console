@@ -7,6 +7,8 @@
 #include "ball.h"
 #include "game.h"
 #include "debug.h"
+#include "esp_log.h"
+
 
 
 // Globals
@@ -359,9 +361,6 @@ void display_init() {
     
     char msg[40];
 
-    // Setup Debug LED
-    pinMode(LED_PIN, OUTPUT);
-
     uint8_t status = get_display_status();
     if (status != DISPLAY_OK) {
         ESP_LOGE("BOOT FAIL", "DISPLAY INITIALIZATION FAIL, ABORTING...");
@@ -374,10 +373,8 @@ void display_init() {
         drawdebugtext(msg);
     #endif
 
-    pinMode(TFT_LED, OUTPUT);
     tft.begin(); // Display init
     tft.fillScreen(ILI9341_BLACK);
 
-    delay(200);
-    digitalWrite(TFT_LED, HIGH);
+    
 }
