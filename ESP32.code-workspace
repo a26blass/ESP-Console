@@ -10,6 +10,10 @@
 		{
 			"name": "ESP32-FinalHack",
 			"path": "."
+		},
+		{
+			"name": "esp32-BatteryVolt",
+			"path": "../../PlatformIO/Projects/esp32-BatteryVolt"
 		}
 	],
 	"settings": {

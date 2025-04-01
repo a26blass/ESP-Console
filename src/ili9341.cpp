@@ -111,6 +111,35 @@ void display_panic_message(const XtExcFrame *exc_frame) {
     #endif
 }
 
+// --- BATTERY ---
+void draw_lowbatt_symbol() {
+    black_screen();
+    
+    // Battery outline dimensions
+    int batteryWidth = 60;
+    int batteryHeight = 30;
+    int batteryX = (SCREEN_WIDTH - batteryWidth) / 2;
+    int batteryY = (SCREEN_HEIGHT - batteryHeight) / 2;
+
+    // Draw outer rectangle (white outline)
+    tft.fillRect(batteryX, batteryY, batteryWidth, batteryHeight, ILI9341_WHITE);
+
+    // Draw inner rectangle (black fill)
+    int innerBatteryWidth = batteryWidth - 10;
+    int innerBatteryHeight = batteryHeight - 10;
+    int innerBatteryX = batteryX + 5;
+    int innerBatteryY = batteryY + 5;
+    tft.fillRect(innerBatteryX, innerBatteryY, innerBatteryWidth, innerBatteryHeight, ILI9341_BLACK);
+
+    // Draw tiny white rectangle on the right (the + terminal)
+    int terminalWidth = 5;
+    int terminalHeight = batteryHeight / 2;
+    int terminalX = batteryX + batteryWidth;
+    int terminalY = batteryY + (batteryHeight - terminalHeight) / 2;
+    tft.fillRect(terminalX, terminalY, terminalWidth, terminalHeight, ILI9341_WHITE);
+}
+
+
 
 // --- PADDLE ---
 // Update paddle position (to be called in loop)
@@ -376,5 +405,5 @@ void display_init() {
     tft.begin(); // Display init
     tft.fillScreen(ILI9341_BLACK);
 
-    
+    dbginfo.screen_init = true;
 }

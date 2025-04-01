@@ -12,9 +12,13 @@ void setup() {
     start_blinking();
 
     system_init();    // Initialize the system, can abort boot
+    Serial.println("SYS INIT");
     display_init();   // Initialize the display and backlight
+    Serial.println("DISP INIT");
     debug_init();     // Initialize debug structs & check status
+    Serial.println("DBG INIT");
     inputs_init();    // Initialize inputs
+    Serial.println("INPUT INIT");
     debug_delay_ms(); // Delay if debug mode is enabled
     
     stop_blinking();
@@ -23,12 +27,14 @@ void setup() {
 }
 
 void loop() {
-    // Current frame beginning time
-    unsigned long frame_start_time = millis();
-
-    // Run one game cycle
-    game_cycle();
+    if (!critical_batt) {
+        // Current frame beginning time
+        unsigned long frame_start_time = millis();
     
-    // Enforce ~60hz refresh rate
-    delay_60_hz(frame_start_time);
+        // Run one game cycle
+        game_cycle();
+        
+        // Enforce ~60hz refresh rate
+        delay_60_hz(frame_start_time);
+    }
 }

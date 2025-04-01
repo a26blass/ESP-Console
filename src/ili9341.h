@@ -4,7 +4,7 @@
 // Display pins
 #define TFT_CS   22
 #define TFT_DC   21
-#define TFT_LED   5
+#define TFT_LED   4
 #define TFT_RST  33
 
 // Screen constants
@@ -31,6 +31,7 @@ void draw_panic_log(const char *text);
 void display_panic_message(const XtExcFrame *exc_frame);
 void black_screen();
 void draw_header();
+void draw_lowbatt_symbol();
 void draw_ball(int x, int y, int old_x, int old_y, int radius);
 void draw_brick(int row, int col, bool overridecol = false, uint16_t color = ILI9341_BLACK);
 void move_bricks_down(int amount);
