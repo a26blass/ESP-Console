@@ -20,5 +20,6 @@ typedef struct {
 float paddle_speed_fn(float speed);
 paddle_t *get_paddle_info();
 void incr_paddle_auto();
+void handle_collision();
 
 #endif

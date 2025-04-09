@@ -2,7 +2,7 @@
 #include "system.h"
 #include "esp_system.h"
 #include "debug.h"
-#include "ili9341.h"
+#include "display.h"
 
 bool critical_batt = false;
 
@@ -16,19 +16,23 @@ void battery_monitor_task(void *pvParameters) {
         ESP_LOGE("SYSTEM", "Battery Voltage: %.2f V", batteryVoltage);
         
         if (batteryVoltage < MIN_VOLTS) {
-            critical_batt = true;
+            #ifndef BATT_VOLT_OVERRIDE
+                critical_batt = true;
+                ESP_LOGE("SYSTEM", "BATTERY VOLTAGE LOW (%.2f V), ENTERING DEEP SLEEP", batteryVoltage);
 
-            ESP_LOGE("SYSTEM", "BATTERY VOLTAGE LOW (%.2f V), ENTERING DEEP SLEEP", batteryVoltage);
+                if (get_screen_init()) {
+                    draw_lowbatt_symbol();
+                    delay(1500);
+                }
 
-            if (get_screen_init()) {
-                draw_lowbatt_symbol();
-                delay(1500);
-            }
+                gpio_set_direction(GPIO_NUM_5, GPIO_MODE_OUTPUT);
+                gpio_set_level(GPIO_NUM_5, 0);
 
-            gpio_set_direction(GPIO_NUM_5, GPIO_MODE_OUTPUT);
-            gpio_set_level(GPIO_NUM_5, 0);
+                esp_deep_sleep_start();
+            #else
+                ESP_LOGE("SYSTEM", "BATTERY VOLTAGE LOW (%.2f V), DEEP SLEEP OVERRIDE, CONTINUING...", batteryVoltage);
+            #endif 
 
-            esp_deep_sleep_start();
         }
         vTaskDelay(BATTERY_CHECK_INTERVAL / portTICK_PERIOD_MS);
     }

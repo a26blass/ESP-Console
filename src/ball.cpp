@@ -1,7 +1,7 @@
 #include <cmath>
 #include "ball.h"
 #include "paddle.h"
-#include "ili9341.h"
+#include "display.h"
 #include "game.h"
 #include "util.h"
 #include "inputs.h"
@@ -36,6 +36,7 @@ void launch_ball() {
 
 void launch_ball_auto() {
     paddle_t *p_info = get_paddle_info();
+    game_t *game_info = get_game_info();
 
     ball.x = p_info->paddle_x + p_info->paddle_width/2;
     ball.y = p_info->paddle_y - p_info->paddle_height - ball.radius-1;
@@ -50,12 +51,24 @@ void launch_ball_auto() {
     draw_ball(ball.x, ball.y, ball.x, ball.y, ball.radius);
     
     for (int i = 0; i < 2500; i++) {
-        if (debug_input_check())
-            break;
+        if (debug_input_check() || get_start_pressed()) {
+            game_info->game_started = true;
+            start_game();   
+            return;
+        }
         delay(1);
     }
 
     launch_ball();
+}
+
+void center_ball_on_paddle() {
+    paddle_t *p_info = get_paddle_info();
+
+    ball.x = p_info->paddle_x + p_info->paddle_width/2;
+    ball.y = p_info->paddle_y - p_info->paddle_height - ball.radius-1; 
+
+    draw_ball(ball.x, ball.y, ball.x, ball.y, ball.radius); 
 }
 
 void ball_collision() {
@@ -129,7 +142,7 @@ void ball_collision() {
                     g_info->current_level.bricks[r][c]--;
                     if (g_info->current_level.bricks[r][c] <= 0) {
                         g_info->game_finished = check_game_finished();
-                        draw_brick(r, c, true, ILI9341_BLACK);
+                        draw_brick(r, c, true, ~ST77XX_BLACK);
                         g_info->points += 10;
                         draw_header();
                     } else {

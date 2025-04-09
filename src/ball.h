@@ -19,6 +19,8 @@ typedef struct {
 
 ball_t *get_ball_info();
 void ball_collision();
+void launch_ball();
 void launch_ball_auto();
+void center_ball_on_paddle();
 
 #endif

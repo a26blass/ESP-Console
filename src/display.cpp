@@ -1,8 +1,9 @@
 #include <Arduino.h>
-#include "ili9341.h"
+#include "display.h"
 #include "SPI.h"
 #include "Adafruit_GFX.h"
 #include "Adafruit_ILI9341.h"
+#include "Adafruit_ST7789.h"
 #include "paddle.h"
 #include "ball.h"
 #include "game.h"
@@ -12,14 +13,14 @@
 
 
 // Globals
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 GFXcanvas1 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
 ili_9341_t dbginfo;
 
 // --- DEBUG ---
 uint8_t get_display_status() {
     // Query display status
-    uint8_t status = tft.readcommand8(ILI9341_RDMODE);
+    uint8_t status = tft.readcommand8(0x09);
     return status;
 }
 
@@ -54,7 +55,7 @@ void draw_panic_log(const char *text) {
 
 // Format and display the panic message
 void display_panic_message(const XtExcFrame *exc_frame) {
-    tft.fillScreen(ILI9341_BLUE);
+    tft.fillScreen(~ST77XX_BLUE);
     dbginfo.dbg_line = 10;
 
     char line[64];
@@ -122,21 +123,21 @@ void draw_lowbatt_symbol() {
     int batteryY = (SCREEN_HEIGHT - batteryHeight) / 2;
 
     // Draw outer rectangle (white outline)
-    tft.fillRect(batteryX, batteryY, batteryWidth, batteryHeight, ILI9341_WHITE);
+    tft.fillRect(batteryX, batteryY, batteryWidth, batteryHeight, ~ST77XX_WHITE);
 
     // Draw inner rectangle (black fill)
     int innerBatteryWidth = batteryWidth - 10;
     int innerBatteryHeight = batteryHeight - 10;
     int innerBatteryX = batteryX + 5;
     int innerBatteryY = batteryY + 5;
-    tft.fillRect(innerBatteryX, innerBatteryY, innerBatteryWidth, innerBatteryHeight, ILI9341_BLACK);
+    tft.fillRect(innerBatteryX, innerBatteryY, innerBatteryWidth, innerBatteryHeight, ~ST77XX_BLACK);
 
     // Draw tiny white rectangle on the right (the + terminal)
     int terminalWidth = 5;
     int terminalHeight = batteryHeight / 2;
     int terminalX = batteryX + batteryWidth;
     int terminalY = batteryY + (batteryHeight - terminalHeight) / 2;
-    tft.fillRect(terminalX, terminalY, terminalWidth, terminalHeight, ILI9341_WHITE);
+    tft.fillRect(terminalX, terminalY, terminalWidth, terminalHeight, ~ST77XX_WHITE);
 }
 
 
@@ -157,12 +158,12 @@ void movePaddleDraw(float direction) {
     if (oldPaddleX != p_info->paddle_x) {
         // Overdraw the old paddle with a black box
         if (p_info->paddle_x > oldPaddleX)
-            tft.fillRect(floor(oldPaddleX), p_info->paddle_y, ceil(p_info->paddle_x - oldPaddleX), p_info->paddle_height, ILI9341_BLACK);
+            tft.fillRect(floor(oldPaddleX), p_info->paddle_y, ceil(p_info->paddle_x - oldPaddleX), p_info->paddle_height, ~ST77XX_BLACK);
         else 
-            tft.fillRect(floor(p_info->paddle_x+p_info->paddle_width), p_info->paddle_y, ceil(oldPaddleX - p_info->paddle_x), p_info->paddle_height, ILI9341_BLACK);
+            tft.fillRect(floor(p_info->paddle_x+p_info->paddle_width), p_info->paddle_y, ceil(oldPaddleX - p_info->paddle_x), p_info->paddle_height, ~ST77XX_BLACK);
 
         // Draw the new paddle at the updated position
-        tft.fillRect(p_info->paddle_x, p_info->paddle_y, p_info->paddle_width, p_info->paddle_height, ILI9341_WHITE);
+        tft.fillRect(p_info->paddle_x, p_info->paddle_y, p_info->paddle_width, p_info->paddle_height, ~ST77XX_WHITE);
     }
 }
 
@@ -178,16 +179,16 @@ void movePaddle(float direction) {
 
 void draw_paddle() {
     paddle_t *p_info = get_paddle_info();
-    tft.fillRect(p_info->paddle_x, p_info->paddle_y, p_info->paddle_width, p_info->paddle_height, ILI9341_WHITE);
+    tft.fillRect(p_info->paddle_x, p_info->paddle_y, p_info->paddle_width, p_info->paddle_height, ~ST77XX_WHITE);
 }
 
 // --- UI ---
 void black_screen() {
-    tft.fillScreen(ILI9341_BLACK);
+    tft.fillScreen(~ST77XX_BLACK);
 }
 
 void drawloadtext() {
-    tft.setTextColor(ILI9341_WHITE); // Set text color to white
+    tft.setTextColor(~ST77XX_WHITE); // Set text color to white
     tft.setTextSize(2); // Text size 2
 
     int charWidth = 6 * 2; // Each character is 12 pixels wide
@@ -204,7 +205,7 @@ void drawloadtext() {
 }
 
 void draw_start_text() {
-    tft.setTextColor(ILI9341_WHITE); // Set text color to white
+    tft.setTextColor(~ST77XX_WHITE); // Set text color to white
     tft.setTextSize(2); // Text size 2
 
     int charWidth = 6 * 2; // Each character is 12 pixels wide
@@ -223,8 +224,8 @@ void draw_start_text() {
 void draw_header() {
     game_t *g_info = get_game_info();
 
-    tft.fillRect(0, 0, tft.width(), HEADER_HEIGHT, ILI9341_BLUE); // Draw header background
-    tft.setTextColor(ILI9341_WHITE);
+    tft.fillRect(0, 0, tft.width(), HEADER_HEIGHT, ~ST77XX_BLUE); // Draw header background
+    tft.setTextColor(~ST77XX_WHITE);
     tft.setTextSize(1);
 
     // Draw Level
@@ -245,16 +246,16 @@ void draw_header() {
     for (int i = 0; i < MAX_LIVES; i++) {
         if (i < g_info->lives) {
             if (i < STARTER_LIVES)
-                tft.fillCircle(livesX + (i * 10), livesY + ballRadius, ballRadius, ILI9341_WHITE); // Filled for active life
+                tft.fillCircle(livesX + (i * 10), livesY + ballRadius, ballRadius, ~ST77XX_WHITE); // Filled for active life
             else 
-                tft.fillCircle(livesX + (i * 10), livesY + ballRadius, ballRadius, ILI9341_GREEN); // Filled for active life
+                tft.fillCircle(livesX + (i * 10), livesY + ballRadius, ballRadius, ~ST77XX_GREEN); // Filled for active life
         } else if (i < STARTER_LIVES) {
-            tft.drawCircle(livesX + (i * 10), livesY + ballRadius, ballRadius, ILI9341_DARKGREY); // Outline for lost life
+            tft.drawCircle(livesX + (i * 10), livesY + ballRadius, ballRadius, ~0x5A5A); // Outline for lost life
         } 
     }
 }
 
-void draw_launch_angle_indicator() {
+void draw_launch_angle_indicator(uint16_t color) {
     ball_t *b_info = get_ball_info();
 
     int indicatorLength = 20; // Length of the indicator
@@ -271,12 +272,12 @@ void draw_launch_angle_indicator() {
     int endY = ballY - indicatorLength * sin(angleRad);
 
     // Erase previous line if it exists
-    if (b_info->prev_end_x != -1 && b_info->prev_end_y != -1 && b_info->prev_end_x != endX && b_info->prev_end_y != endY) {
-        tft.drawLine(ballX, ballY, b_info->prev_end_x, b_info->prev_end_y, ILI9341_BLACK);
+    if (b_info->prev_end_x != -1 && b_info->prev_end_y != -1 && (b_info->prev_end_x != endX || b_info->prev_end_y != endY)) {
+        tft.drawLine(ballX, ballY, b_info->prev_end_x, b_info->prev_end_y, ~ST77XX_BLACK);
     }
 
     // Draw new indicator line
-    tft.drawLine(ballX, ballY, endX, endY, ILI9341_WHITE);
+    tft.drawLine(ballX, ballY, endX, endY, ~ST77XX_WHITE);
 
     // Store new end position
     b_info->prev_end_x = endX;
@@ -284,6 +285,7 @@ void draw_launch_angle_indicator() {
 }
 
 void increaseLaunchAngle() {
+    //draw_launch_angle_indicator(~ST77XX_BLACK);
     ball_t *b_info = get_ball_info();
 
     if (b_info->launch_angle < 150) {
@@ -293,6 +295,7 @@ void increaseLaunchAngle() {
 }
 
 void decreaseLaunchAngle() {
+    //draw_launch_angle_indicator(~ST77XX_BLACK);
     ball_t *b_info = get_ball_info();
     if (b_info->launch_angle > 30) {
         b_info->launch_angle -= 5;
@@ -304,17 +307,17 @@ void decreaseLaunchAngle() {
 void draw_ball(int x, int y, int old_x, int old_y, int radius) {
 
     if (x != old_x || y != old_y)
-        tft.fillCircle(old_x, old_y, radius, ILI9341_BLACK);
-    tft.fillCircle(x, y, radius, ILI9341_WHITE);
+        tft.fillCircle(old_x, old_y, radius, ~ST77XX_BLACK);
+    tft.fillCircle(x, y, radius, ~ST77XX_WHITE);
 }
 
 // --- BRICKS ---
 uint16_t getBrickColor(int durability) {
     switch (durability) {
-        case 3: return ILI9341_GREEN;
-        case 2: return ILI9341_ORANGE;
-        case 1: return ILI9341_RED;
-        default: return ILI9341_BLACK;
+        case 3: return ~ST77XX_GREEN;
+        case 2: return ~ST77XX_ORANGE;
+        case 1: return ~ST77XX_RED;
+        default: return ~ST77XX_BLACK;
     }
 }
 
@@ -352,7 +355,7 @@ void draw_all_bricks() {
 
 void draw_loss_boundary() {
     // Draw lose boundary
-    tft.drawLine(0, MIN_BRICK_HEIGHT, SCREEN_WIDTH, MIN_BRICK_HEIGHT, ILI9341_RED);
+    tft.drawLine(0, MIN_BRICK_HEIGHT, SCREEN_WIDTH, MIN_BRICK_HEIGHT, ~ST77XX_RED);
 }
 
 void move_bricks_down(int amount) {
@@ -365,23 +368,23 @@ void move_bricks_down(int amount) {
 
 // -- POWERUPS ---
 void drawMissile(int x, int y) {
-    tft.fillTriangle(x, y, x - 3, y + 8, x + 3, y + 8, ILI9341_RED); // Rocket tip
-    tft.fillRect(x - 2, y + 8, 4, 10, ILI9341_WHITE); // Rocket body
-    tft.fillTriangle(x - 3, y + 18, x + 3, y + 18, x, y + 22, ILI9341_ORANGE); // Rocket flames
+    tft.fillTriangle(x, y, x - 3, y + 8, x + 3, y + 8, ~ST77XX_RED); // Rocket tip
+    tft.fillRect(x - 2, y + 8, 4, 10, ~ST77XX_WHITE); // Rocket body
+    tft.fillTriangle(x - 3, y + 18, x + 3, y + 18, x, y + 22, ~ST77XX_ORANGE); // Rocket flames
 }
 
 void drawExtraBalls(int x, int y) {
-    tft.fillCircle(x - 6, y, 3, ILI9341_CYAN);
-    tft.fillCircle(x, y, 3, ILI9341_CYAN);
-    tft.fillCircle(x + 6, y, 3, ILI9341_CYAN);
+    tft.fillCircle(x - 6, y, 3, ~ST77XX_CYAN);
+    tft.fillCircle(x, y, 3, ~ST77XX_CYAN);
+    tft.fillCircle(x + 6, y, 3, ~ST77XX_CYAN);
 }
 
 void drawLargeBall(int x, int y) {
-    tft.fillCircle(x, y, 6, ILI9341_YELLOW);
+    tft.fillCircle(x, y, 6, ~ST77XX_YELLOW);
 }
 
 void drawLaser(int x, int y) {
-    tft.fillRoundRect(x - 10, y, 20, 6, 3, ILI9341_RED);
+    tft.fillRoundRect(x - 10, y, 20, 6, 3, ~ST77XX_RED);
 }
 
 // --- INIT ---
@@ -402,8 +405,11 @@ void display_init() {
         drawdebugtext(msg);
     #endif
 
-    tft.begin(); // Display init
-    tft.fillScreen(ILI9341_BLACK);
+    tft.init(240, 320); // Display init
+    tft.fillScreen(~ST77XX_BLACK);
+
+    Serial.println(tft.width());
+    Serial.println(tft.height());
 
     dbginfo.screen_init = true;
 }

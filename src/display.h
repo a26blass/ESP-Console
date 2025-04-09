@@ -1,5 +1,6 @@
 #include "xtensa/xtensa_context.h"
 #include "Adafruit_ILI9341.h"
+#include "Adafruit_ST7789.h"
 
 // Display pins
 #define TFT_CS   22
@@ -8,11 +9,12 @@
 #define TFT_RST  33
 
 // Screen constants
-#define SCREEN_WIDTH  240
+#define SCREEN_WIDTH 240 
 #define SCREEN_HEIGHT 320
 #define HEADER_HEIGHT 15
 #define TOP_BUFFER 15
 #define DISPLAY_OK status & (1 << 10)
+#define SPI_SPEED 24000000 
 
 #ifndef DISPLAY_H
 #define DISPLAY_H
@@ -33,11 +35,13 @@ void black_screen();
 void draw_header();
 void draw_lowbatt_symbol();
 void draw_ball(int x, int y, int old_x, int old_y, int radius);
-void draw_brick(int row, int col, bool overridecol = false, uint16_t color = ILI9341_BLACK);
+void draw_brick(int row, int col, bool overridecol = false, uint16_t color = ~ST77XX_BLACK);
 void move_bricks_down(int amount);
 void draw_all_bricks();
 void draw_paddle();
-void draw_launch_angle_indicator();
+void increaseLaunchAngle();
+void decreaseLaunchAngle();
+void draw_launch_angle_indicator(uint16_t color = ~ST77XX_WHITE);
 void draw_loss_boundary();
 void drawloadtext();
 void draw_start_text();

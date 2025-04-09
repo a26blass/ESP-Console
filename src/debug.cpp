@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "debug.h"
 #include "game.h"
-#include "ili9341.h"
+#include "display.h"
 #include "esp_system.h"
 #include "esp_task_wdt.h"
 #include "esp_log.h"
@@ -165,6 +165,8 @@ void debug_init() {
     char msg[40];
     
     debug.screen_init = true;
+
+    drawloadtext();
     
     esp_chip_info_t c_info;
     esp_chip_info(&c_info);
@@ -230,8 +232,6 @@ void debug_init() {
         drawdebugtext(msg);
     #endif  
 
-    drawloadtext();
-    
     #ifdef DEBUG
         drawdebugtext("LEVEL LOAD OK...");
     #endif

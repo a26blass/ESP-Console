@@ -1,9 +1,10 @@
 #include <Arduino.h>
 #include <cmath>
 #include "game.h"
-#include "ili9341.h"
+#include "display.h"
 #include "paddle.h"
 #include "ball.h"
+#include "inputs.h"
 #include "util.h"
 #include "debug.h"
 
@@ -137,14 +138,22 @@ void start_game() {
     ball_t *b_info = get_ball_info();
     game.current_level_index = -1;
     game.lives = 3;
+    game.points = 0;
     b_info->speed = STARTER_SPEED;
 
-    // Black screen before AI game
+    // Black screen before game
     black_screen();
 
     uint32_t cur_time = millis();
     
+
     while(millis() - cur_time < 5000 && digitalRead(BOOT_PIN) == HIGH) {
+        if (get_start_pressed() || game.game_started) {
+            black_screen();
+            game.game_started = true;
+            break;
+        }
+
         draw_start_text();
     }
 
@@ -157,14 +166,46 @@ void game_cycle() {
 
     game.game_finished = false;
     
+    // Paddle logic / starting game
     if(!game.game_started) {
-        incr_paddle_auto();
+        if (get_start_pressed()) {
+            game.game_started = true;
+            start_game();
+        } else {
+            incr_paddle_auto();
+        }
+    } else if (!b_info->ball_on_paddle) {
+        if (get_left_pressed()) {
+            movePaddleDraw(-p_info->paddle_speed);
+        }
+        else if (get_right_pressed()) {
+            movePaddleDraw(p_info->paddle_speed);
+        }
+        
+        draw_paddle();
+        handle_collision(); // Paddle-ball collision
+    } else { 
+        draw_paddle();
     }
     
     // Ball logic
 
     if (b_info->ball_on_paddle) {
-        launch_ball_auto();
+        if(!game.game_started)
+            launch_ball_auto();
+        else {
+            center_ball_on_paddle();
+            if (get_a_pressed())
+                launch_ball();
+            if (get_left_pressed()) {
+                increaseLaunchAngle();
+            }
+            if (get_right_pressed()) {
+                decreaseLaunchAngle();
+            }
+
+            draw_launch_angle_indicator();
+        }
     } else {
         unsigned long currentMillis = millis();
 

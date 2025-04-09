@@ -1,7 +1,7 @@
 #include <cmath>
 #include <Arduino.h>
 #include "paddle.h"
-#include "ili9341.h"
+#include "display.h"
 #include "ball.h"
 #include "util.h"
 
@@ -53,7 +53,6 @@ void incr_paddle_auto() {
 
     handle_collision();
 
-    // TODO: Remove
     if (!b_info->ball_on_paddle && (b_info->dy > 0 || abs(b_info -> dx) > paddle.paddle_speed || b_info->y >= SCREEN_HEIGHT/2)) {
         int padding = b_info->radius;
         if(b_info->x < paddle.paddle_x + paddle.target_coord - padding) {

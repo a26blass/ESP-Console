@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "ili9341.h"
+#include "display.h"
 #include "debug.h"
 #include "game.h"
 #include "inputs.h"

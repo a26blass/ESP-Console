@@ -1,4 +1,8 @@
 // system.h
+
+// Uncomment to override low battery shutoff
+// #define BATT_VOLT_OVERRIDE
+
 #ifndef SYSTEM_H
 
 #include <Arduino.h>
@@ -11,7 +15,7 @@ const float R2 = 990;
 const float V_REF = 4.4;
 const int ADC_MAX = 4095;
 const int NUM_SAMPLES = 300;
-const float MIN_VOLTS = 3.25;
+const float MIN_VOLTS = 3.20;
 const int BATTERY_CHECK_INTERVAL = 10000; // 10 seconds
 extern bool critical_batt;
 
