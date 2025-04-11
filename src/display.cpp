@@ -406,6 +406,7 @@ void display_init() {
     #endif
 
     tft.init(240, 320); // Display init
+    tft.setRotation(2);
     tft.fillScreen(~ST77XX_BLACK);
 
     Serial.println(tft.width());
