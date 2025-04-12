@@ -29,7 +29,4 @@ void start_game();
 bool check_game_finished();
 void next_level(bool use_load_screen=true);
 void load_level(int levelIndex, bool use_load_scree=true);
-void end_game_and_restart(bool is_ai_game);
-void game_cycle();
-
-#endif
+void en

@@ -88,26 +88,4 @@ void system_init() {
     ESP_LOGI("SYSTEM", msg);
 
     if (reset_reason == ESP_RST_BROWNOUT) {
-        ESP_LOGE("SYSTEM FAIL", "BROWNOUT DETECTED, ENTERING DEEP SLEEP...");
-        esp_deep_sleep_start();
-    }
-
-    xTaskCreatePinnedToCore(
-        battery_monitor_task,
-        "BatteryMonitor",
-        2048,
-        NULL,
-        1,
-        NULL,
-        0
-    );
-
-    ESP_LOGI("SYSTEM", "BATTERY MONITOR INIT");
-
-    // Allow battery monitor to run once
-    delay(500);
-    
-    if(!critical_batt)
-        pinMode(TFT_LED, OUTPUT);
-        digitalWrite(TFT_LED, HIGH);
-}
+        ESP_LOGE("SYST

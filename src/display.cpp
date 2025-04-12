@@ -413,48 +413,4 @@ void move_bricks_down(int amount) {
 // -- POWERUPS ---
 void drawMissile(int x, int y) {
     tft.fillTriangle(x, y, x - 3, y + 8, x + 3, y + 8, ~ST77XX_RED); // Rocket tip
-    tft.fillRect(x - 2, y + 8, 4, 10, ~ST77XX_WHITE); // Rocket body
-    tft.fillTriangle(x - 3, y + 18, x + 3, y + 18, x, y + 22, ~ST77XX_ORANGE); // Rocket flames
-}
-
-void drawExtraBalls(int x, int y) {
-    tft.fillCircle(x - 6, y, 3, ~ST77XX_CYAN);
-    tft.fillCircle(x, y, 3, ~ST77XX_CYAN);
-    tft.fillCircle(x + 6, y, 3, ~ST77XX_CYAN);
-}
-
-void drawLargeBall(int x, int y) {
-    tft.fillCircle(x, y, 6, ~ST77XX_YELLOW);
-}
-
-void drawLaser(int x, int y) {
-    tft.fillRoundRect(x - 10, y, 20, 6, 3, ~ST77XX_RED);
-}
-
-// --- INIT ---
-void display_init() {
-    dbginfo.dbg_line = 10;
-    
-    char msg[40];
-
-    uint8_t status = get_display_status();
-    if (status != DISPLAY_OK) {
-        ESP_LOGE("BOOT FAIL", "DISPLAY INITIALIZATION FAIL, ABORTING...");
-        esp_system_abort("DISPLAY INIT FAIL");
-    }
-
-    sprintf(msg, "DISPLAY INITIALIZATION OK (0x%X)...", status);
-    ESP_LOGI("BOOT", msg);
-    #ifdef DEBUG
-        drawdebugtext(msg);
-    #endif
-
-    tft.init(240, 320); // Display init
-    tft.setRotation(2);
-    tft.fillScreen(~ST77XX_BLACK);
-
-    Serial.println(tft.width());
-    Serial.println(tft.height());
-
-    dbginfo.screen_init = true;
-}
+    tft.fillRect(x - 2, y + 8, 4, 10, ~ST77XX_WHITE); // Ro

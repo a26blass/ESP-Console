@@ -269,19 +269,4 @@ void game_cycle() {
         // Draw ball in new location, erase in old location
         draw_ball(b_info->x, b_info->y, old_x, old_y, b_info->radius);
         
-        if (b_info->collided_r >= 0 && b_info->collided_c >= 0 && game.current_level.bricks[b_info->collided_r][b_info->collided_c] != 0) {
-            draw_brick(b_info->collided_r, b_info->collided_c);
-        }
-        
-        if (game.redraw_header) {
-            draw_header();
-            game.redraw_header = false;
-        }
-
-        if (game.game_finished) {
-            next_level(true);
-        } else if (!game.game_started) {
-            draw_start_text();
-        }
-    }
-}
+        if (b_info->collided_r >= 0 && b_info->collided_c >= 0 && game.current_level.bricks

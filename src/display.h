@@ -47,8 +47,4 @@ void draw_loss_boundary();
 void drawloadtext();
 void draw_start_text();
 void movePaddleDraw(float direction);
-void movePaddle(float direction);
-void display_init();
-
-
-#endif
+void movePaddl
