@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"name": "ILI9341-TEST",
+			"path": "../../../PlatformIO/Projects/ILI9341-TEST"
+		}
+	],
+	"settings": {}
+}

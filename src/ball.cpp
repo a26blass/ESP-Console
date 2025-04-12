@@ -51,10 +51,14 @@ void launch_ball_auto() {
     draw_ball(ball.x, ball.y, ball.x, ball.y, ball.radius);
     
     for (int i = 0; i < 2500; i++) {
-        if (debug_input_check() || get_start_pressed()) {
+        if (debug_input_check() || get_a_pressed()) {
             game_info->game_started = true;
             start_game();   
             return;
+        }
+        if (get_start_pressed()) {
+            pause_menu_logic();
+            break;
         }
         delay(1);
     }

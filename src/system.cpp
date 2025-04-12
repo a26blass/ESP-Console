@@ -18,7 +18,7 @@ void battery_monitor_task(void *pvParameters) {
         float batteryVoltage = readBatteryVoltage();
         ESP_LOGE("SYSTEM", "Battery Voltage: %.2f V", batteryVoltage);
         
-        if (batteryVoltage < MIN_VOLTS) {
+        if (batteryVoltage < MIN_VOLTS && batteryVoltage > NOBATT_VOLTS) {
             #ifndef BATT_VOLT_OVERRIDE
                 critical_batt = true;
                 ESP_LOGE("SYSTEM", "BATTERY VOLTAGE LOW (%.2f V), ENTERING DEEP SLEEP", batteryVoltage);
@@ -36,6 +36,8 @@ void battery_monitor_task(void *pvParameters) {
                 ESP_LOGE("SYSTEM", "BATTERY VOLTAGE LOW (%.2f V), DEEP SLEEP OVERRIDE, CONTINUING...", batteryVoltage);
             #endif 
 
+        } if (batteryVoltage < NOBATT_VOLTS) {
+            ESP_LOGE("SYSTEM", "BATTERY VOLTAGE BELOW MINVOLTS (%.2f V), RUNNING ON USB POWER", batteryVoltage); 
         }
         vTaskDelay(BATTERY_CHECK_INTERVAL / portTICK_PERIOD_MS);
     }
@@ -106,8 +108,4 @@ void system_init() {
 
     // Allow battery monitor to run once
     delay(500);
-    
-    if(!critical_batt)
-        pinMode(TFT_LED, OUTPUT);
-        digitalWrite(TFT_LED, HIGH);
 }

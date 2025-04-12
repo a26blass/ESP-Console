@@ -16,6 +16,8 @@
 bool prevStateA = HIGH;
 bool prevStateB = HIGH;
 bool prevStateStart = HIGH;
+bool prevStateUp = HIGH;
+bool prevStateDown = HIGH;
 
 void inputs_init() {
     pinMode(DBG_BUTTON_PIN, INPUT_PULLUP);
@@ -34,13 +36,30 @@ bool debug_input_check() {
 
 // Function to check if UP button is pressed
 bool get_up_pressed() {
-    return digitalRead(INPUT_UP) == LOW;
+    bool currentState = digitalRead(INPUT_UP) == LOW;
+    if (currentState && prevStateUp == HIGH) {
+        prevStateUp = LOW;
+        return true;
+    }
+    if (!currentState) {
+        prevStateUp = HIGH;
+    }
+    return false;
 }
 
 // Function to check if DOWN button is pressed
 bool get_down_pressed() {
-    return digitalRead(INPUT_DOWN) == LOW;
+    bool currentState = digitalRead(INPUT_DOWN) == LOW;
+    if (currentState && prevStateDown == HIGH) {
+        prevStateDown = LOW;
+        return true;
+    }
+    if (!currentState) {
+        prevStateDown = HIGH;
+    }
+    return false;
 }
+
 
 // Function to check if LEFT button is pressed
 bool get_left_pressed() {

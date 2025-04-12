@@ -231,6 +231,52 @@ void draw_leaderboard(int score, int max_score) {
     tft.printf(score_str);
 }
 
+void drawpausescreen(int selected_option) {
+    black_screen();
+    tft.setTextSize(2);
+
+    // Centered "PAUSED..." text, moved up a bit
+    const char* paused_text = "PAUSED...";
+    int charWidth = 6 * 2;
+    int charHeight = 8 * 2;
+    int textWidth = strlen(paused_text) * charWidth;
+    int paused_x = (240 - textWidth) / 2;
+    int paused_y = 60; // Moved up to leave room below
+
+    tft.setTextColor(~ST77XX_WHITE);
+    tft.setCursor(paused_x, paused_y);
+    tft.printf(paused_text);
+
+    // Options
+    const char* options[] = { "Brightness", "Reset Game", "Restart Console" };
+    int box_width = 180;
+    int box_height = 40;
+    int box_x = (240 - box_width) / 2;
+    int first_box_y = 120;
+    int spacing = 10;
+
+    for (int i = 0; i < 3; i++) {
+        int box_y = first_box_y + i * (box_height + spacing);
+        if (i == selected_option) {
+            // Highlighted option: blue background, white text
+            tft.fillRect(box_x, box_y, box_width, box_height, ~ST77XX_BLUE);
+            tft.setTextColor(~ST77XX_WHITE);
+        } else {
+            // Unselected: black with white border
+            tft.fillRect(box_x, box_y, box_width, box_height, ~ST77XX_BLACK);
+            tft.drawRect(box_x, box_y, box_width, box_height, ~ST77XX_WHITE);
+            tft.setTextColor(~ST77XX_WHITE);
+        }
+
+        // Center text inside the box
+        int text_x = box_x + (box_width - strlen(options[i]) * charWidth) / 2;
+        int text_y = box_y + (box_height - charHeight) / 2;
+        tft.setCursor(text_x, text_y);
+        tft.print(options[i]);
+    }
+}
+
+
 void drawloadtext() {
     tft.setTextColor(~ST77XX_WHITE); // Set text color to white
     tft.setTextSize(2); // Text size 2
@@ -254,7 +300,7 @@ void draw_start_text() {
 
     int charWidth = 6 * 2; // Each character is 12 pixels wide
     int charHeight = 8 * 2; // Each character is 16 pixels tall
-    int textLength = 11; // "LOADING..." has 10 characters
+    int textLength = 7; // "LOADING..." has 10 characters
     int textWidth = textLength * charWidth;
     int textHeight = charHeight;
     
@@ -262,7 +308,7 @@ void draw_start_text() {
     int y = (320 - textHeight) / 2;
 
     tft.setCursor(x, y);
-    tft.print("PRESS START");
+    tft.print("PRESS A");
 }
 
 void draw_header() {
@@ -431,6 +477,11 @@ void drawLaser(int x, int y) {
     tft.fillRoundRect(x - 10, y, 20, 6, 3, ~ST77XX_RED);
 }
 
+// --- BRIGHTNESS ---
+void set_brightness(uint32_t duty) {
+    ledcWrite(PWM_CHANNEL, duty);
+}
+
 // --- INIT ---
 void display_init() {
     dbginfo.dbg_line = 10;
@@ -455,6 +506,10 @@ void display_init() {
 
     Serial.println(tft.width());
     Serial.println(tft.height());
+
+    ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+    ledcAttachPin(TFT_LED, PWM_CHANNEL);
+    ledcWrite(PWM_CHANNEL, 255);
 
     dbginfo.screen_init = true;
 }

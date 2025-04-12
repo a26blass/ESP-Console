@@ -153,7 +153,7 @@ void start_game() {
     
 
     while(millis() - cur_time < 5000 && digitalRead(BOOT_PIN) == HIGH) {
-        if (get_start_pressed() || game.game_started) {
+        if (get_a_pressed() || game.game_started) {
             black_screen();
             game.game_started = true;
             break;
@@ -188,6 +188,54 @@ void end_game_and_restart(bool is_ai_game) {
     next_level(true); 
 }
 
+void handle_pause_input(int selected_option) {
+    switch (selected_option) {
+        case 0: { // Brightness adjustment
+            static int brightness_level = 2; // 0 = Low, 1 = Medium, 2 = High
+            int brightness_values[] = { 50, 150, 255 }; // Define brightness levels
+            
+            brightness_level = (brightness_level + 1) % 3; // Cycle through levels
+            set_brightness(brightness_values[brightness_level]);
+            break;
+        }
+        case 1: // Reset game
+            end_game_and_restart(true);
+            break;
+        case 2: // Restart ESP32
+            ESP.restart();
+            break;
+    }
+}
+
+void pause_menu_logic() {
+    drawpausescreen(0);
+    int selected_opt = 0;
+    while (!get_start_pressed() && !get_b_pressed()) {
+        if (get_up_pressed()) {
+            if (--selected_opt < 0) {
+                selected_opt = 2;
+            }
+            drawpausescreen(selected_opt);
+        } else if (get_down_pressed()) {
+            selected_opt++;
+            selected_opt %= 3;
+            drawpausescreen(selected_opt);
+        }  else if (get_a_pressed()) {
+            handle_pause_input(selected_opt);
+
+            if (selected_opt != 0)
+                return;
+        }
+        delay(1);
+
+    }
+    black_screen();
+    draw_all_bricks();
+    draw_header();
+    draw_loss_boundary();
+}
+
+
 void game_cycle() {
     ball_t *b_info = get_ball_info();
     paddle_t *p_info = get_paddle_info();
@@ -196,7 +244,7 @@ void game_cycle() {
     
     // Paddle logic / starting game
     if(!game.game_started) {
-        if (get_start_pressed()) {
+        if (get_a_pressed()) {
             game.game_started = true;
             start_game();
         } else {
@@ -282,6 +330,9 @@ void game_cycle() {
             next_level(true);
         } else if (!game.game_started) {
             draw_start_text();
-        }
+        } 
+    }
+    if (get_start_pressed()) {
+        pause_menu_logic();
     }
 }
