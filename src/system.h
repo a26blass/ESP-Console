@@ -23,7 +23,4 @@ extern bool critical_batt;
 int get_hiscore();
 void set_hiscore(int hiscore);
 void system_init();
-void battery_monitor_task(void *pvParameters);
-float readBatteryVoltage();
-
-#endif
+void battery_monitor_task(void *
