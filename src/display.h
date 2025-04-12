@@ -32,6 +32,7 @@ void drawdebugtext(const char* text);
 void draw_panic_log(const char *text);
 void display_panic_message(const XtExcFrame *exc_frame);
 void black_screen();
+void draw_leaderboard(int score, int max_score);
 void draw_header();
 void draw_lowbatt_symbol();
 void draw_ball(int x, int y, int old_x, int old_y, int radius);

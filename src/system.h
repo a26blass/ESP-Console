@@ -19,6 +19,8 @@ const float MIN_VOLTS = 3.20;
 const int BATTERY_CHECK_INTERVAL = 10000; // 10 seconds
 extern bool critical_batt;
 
+int get_hiscore();
+void set_hiscore(int hiscore);
 void system_init();
 void battery_monitor_task(void *pvParameters);
 float readBatteryVoltage();

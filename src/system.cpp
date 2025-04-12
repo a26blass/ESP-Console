@@ -1,10 +1,13 @@
 #include <Arduino.h>
+#include <Preferences.h>
 #include "system.h"
 #include "esp_system.h"
 #include "debug.h"
 #include "display.h"
 
+// GLOBALS
 bool critical_batt = false;
+Preferences prefs; // used to fetch max score, stored in NVRAM
 
 /* Task will be spun up on boot
    Asynchronously triggers battery monitor circuit, 
@@ -52,6 +55,17 @@ float readBatteryVoltage() {
     return voltage * ((R1 + R2) / R2);
 }
 
+int get_hiscore() {
+    int hiscore = prefs.getInt("highscore", 0); // Default to 0
+    Serial.println("Fetched Stored High Score: " + String(hiscore));
+    return hiscore;
+}
+
+void set_hiscore(int hiscore) {
+    prefs.putInt("highscore", hiscore);
+    Serial.println("New high score saved");
+}
+
 void system_init() {
     // Setup pins / serial
     Serial.begin(115200);
@@ -67,6 +81,7 @@ void system_init() {
         esp_log_level_set("SYSTEM", ESP_LOG_INFO);
     #endif
 
+    prefs.begin("game", false); // setup prefs, namespace game
 
     esp_reset_reason_t reset_reason = esp_reset_reason();
     sprintf(msg, "RESET REASON: %s", reset_reason_to_string(reset_reason));

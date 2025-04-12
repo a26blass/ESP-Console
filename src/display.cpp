@@ -187,6 +187,50 @@ void black_screen() {
     tft.fillScreen(~ST77XX_BLACK);
 }
 
+void draw_leaderboard(int score, int max_score) {
+    black_screen();
+
+    tft.setTextColor(~ST77XX_WHITE); // Set text color to white
+    tft.setTextSize(2); // Text size 2
+
+    int charWidth = 6 * 2; // Each character is 12 pixels wide
+    int charHeight = 8 * 2; // Each character is 16 pixels tall
+    int textLength = 10; // "LOADING..." has 10 characters
+    int textWidth = textLength * charWidth;
+    int textHeight = charHeight;
+    
+    int x = (240 - textWidth) / 2;
+    int y = (320 - textHeight) / 2;
+
+    tft.setCursor(x, y);
+    tft.print("GAME OVER!");
+
+    tft.setTextSize(1);
+    y += charHeight * 3;
+    charWidth = 6;
+
+    char score_str[25];
+
+    sprintf(score_str, "SCORE: %d", score);
+
+    textLength = strlen(score_str);
+    textWidth = textLength * charWidth;
+    x =  (240 - textWidth) / 2; 
+    tft.setCursor(x, y);
+
+    tft.printf(score_str);
+    y += 8;
+
+    sprintf(score_str, "MAX SCORE: %d", max_score);
+
+    textLength = strlen(score_str);
+    textWidth = textLength * charWidth;
+    x =  (240 - textWidth) / 2; 
+    tft.setCursor(x, y);
+
+    tft.printf(score_str);
+}
+
 void drawloadtext() {
     tft.setTextColor(~ST77XX_WHITE); // Set text color to white
     tft.setTextSize(2); // Text size 2

@@ -15,6 +15,7 @@ typedef struct {
     int num_levels;
     int points;
     int lives;
+    int max_score;
     bool redraw_header;
     unsigned long last_interval;
     float interval;
@@ -28,6 +29,7 @@ void start_game();
 bool check_game_finished();
 void next_level(bool use_load_screen=true);
 void load_level(int levelIndex, bool use_load_scree=true);
+void end_game_and_restart(bool is_ai_game);
 void game_cycle();
 
 #endif

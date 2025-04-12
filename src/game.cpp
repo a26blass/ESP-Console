@@ -7,13 +7,16 @@
 #include "inputs.h"
 #include "util.h"
 #include "debug.h"
+#include "system.h"
 
+// GLOBALS
 game_t game = {
     .current_level = {},  // Assuming LevelInfo has a default constructor or initialization
     .current_level_index = 0,
     .num_levels = sizeof(levels) / sizeof(LevelInfo),
     .points = 0,
     .lives = STARTER_LIVES,
+    .max_score = 0,
     .redraw_header = false,
     .last_interval = 0,
     .interval = DEFAULT_INTERVAL,
@@ -21,6 +24,7 @@ game_t game = {
     .game_started = false,
     .game_finished = false
 };
+
 
 game_t *get_game_info() {
     return &game;
@@ -139,6 +143,7 @@ void start_game() {
     game.current_level_index = -1;
     game.lives = 3;
     game.points = 0;
+    game.max_score = get_hiscore();
     b_info->speed = STARTER_SPEED;
 
     // Black screen before game
@@ -158,6 +163,29 @@ void start_game() {
     }
 
     next_level(false);
+}
+
+void end_game_and_restart(bool is_ai_game) {
+    ball_t *b_info = get_ball_info();
+
+    if (!is_ai_game) {
+        draw_leaderboard(game.points, game.max_score);
+
+        delay(3000);
+
+        if (game.points > game.max_score) {
+            set_hiscore(game.points);
+            game.max_score = game.points;
+        }
+    }
+
+    game.current_level_index = -1;
+    game.points = 0;
+    game.lives = 3;
+    b_info->speed = STARTER_SPEED;
+
+
+    next_level(true); 
 }
 
 void game_cycle() {
@@ -224,12 +252,7 @@ void game_cycle() {
                     game.lives -= 1;
                     next_level(true);
                 } else {
-                    game.current_level_index = -1;
-                    game.points = 0;
-                    game.lives = 3;
-                    b_info->speed = STARTER_SPEED;
-    
-                    next_level(true);
+                    end_game_and_restart(!game.game_started);
                 }
                 return;
             }   

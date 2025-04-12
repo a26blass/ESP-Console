@@ -88,12 +88,7 @@ void ball_collision() {
         if (g_info->lives > 0) {
             g_info->lives -= 1;
         } else {
-            g_info->current_level_index = -1;
-            g_info->points = 0;
-            g_info->lives = 3;
-            ball.speed = STARTER_SPEED;
-
-            next_level();
+            end_game_and_restart(!g_info->game_started); 
         }
         draw_header();
 
