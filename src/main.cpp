@@ -9,8 +9,6 @@
 void setup() {
     
     pinMode(LED_PIN, OUTPUT); // Setup Debug LED
-    start_blinking();
-
     system_init();    // Initialize the system, can abort boot
     Serial.println("SYS INIT");
     display_init();   // Initialize the display and backlight
@@ -21,8 +19,6 @@ void setup() {
     Serial.println("INPUT INIT");
     debug_delay_ms(); // Delay if debug mode is enabled
     
-    stop_blinking();
-
     start_game();     // Begin the game
 }
 

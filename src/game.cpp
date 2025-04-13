@@ -31,8 +31,6 @@ game_t *get_game_info() {
 }
 
 void load_level(int levelIndex, bool use_load_screen) {
-    start_blinking();
-
     if(use_load_screen)
         drawloadtext();
     delay(200);
@@ -47,8 +45,6 @@ void load_level(int levelIndex, bool use_load_screen) {
     int spacing = game.current_level.brickSpacing;
     game.current_level.brickOffsetX = (SCREEN_WIDTH - (numCols * (width + spacing)))/2;
     game.current_level.brickOffsetY = HEADER_HEIGHT + TOP_BUFFER;
-
-    stop_blinking();
 }
 
 void resetGame(bool use_load_screen) {
@@ -191,17 +187,23 @@ void end_game_and_restart(bool is_ai_game) {
 void handle_pause_input(int selected_option) {
     switch (selected_option) {
         case 0: { // Brightness adjustment
-            static int brightness_level = 2; // 0 = Low, 1 = Medium, 2 = High
-            int brightness_values[] = { 50, 150, 255 }; // Define brightness levels
+            static int brightness_level = 3; // 0 = Low, 1 = Medium, 2 = High
+            int brightness_values[] = { 25, 50, 150, 255 }; // Define brightness levels
             
-            brightness_level = (brightness_level + 1) % 3; // Cycle through levels
+            brightness_level = (brightness_level + 1) % 4; // Cycle through levels
             set_brightness(brightness_values[brightness_level]);
             break;
         }
-        case 1: // Reset game
+        case 1: { // Toggle LED brightness
+            static int led_level = 3; // 0 = off, 1 = dim, 2 = full
+            led_level = (led_level + 1) % 4;
+            led_brightness(led_level);
+            break;
+        }
+        case 2: // Reset game
             end_game_and_restart(true);
             break;
-        case 2: // Restart ESP32
+        case 3: // Restart ESP32
             ESP.restart();
             break;
     }
@@ -210,24 +212,32 @@ void handle_pause_input(int selected_option) {
 void pause_menu_logic() {
     drawpausescreen(0);
     int selected_opt = 0;
+    int cycles = 0;
     while (!get_start_pressed() && !get_b_pressed()) {
+        cycles++;
+
         if (get_up_pressed()) {
             if (--selected_opt < 0) {
-                selected_opt = 2;
+                selected_opt = 3;
             }
             drawpausescreen(selected_opt);
         } else if (get_down_pressed()) {
             selected_opt++;
-            selected_opt %= 3;
+            selected_opt %= 4;
             drawpausescreen(selected_opt);
         }  else if (get_a_pressed()) {
             handle_pause_input(selected_opt);
 
-            if (selected_opt != 0)
+            if (selected_opt > 1)
                 return;
         }
-        delay(1);
 
+        if (cycles > BATTERY_CHECK_INTERVAL) {
+            draw_batt_volts();
+            cycles = 0;
+        }
+
+        delay(1);
     }
     black_screen();
     draw_all_bricks();
@@ -316,10 +326,8 @@ void game_cycle() {
 
         // Draw ball in new location, erase in old location
         draw_ball(b_info->x, b_info->y, old_x, old_y, b_info->radius);
-        
-        if (b_info->collided_r >= 0 && b_info->collided_c >= 0 && game.current_level.bricks[b_info->collided_r][b_info->collided_c] != 0) {
-            draw_brick(b_info->collided_r, b_info->collided_c);
-        }
+
+        draw_all_bricks();
         
         if (game.redraw_header) {
             draw_header();

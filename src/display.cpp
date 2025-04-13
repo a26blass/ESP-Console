@@ -9,6 +9,7 @@
 #include "game.h"
 #include "debug.h"
 #include "esp_log.h"
+#include "system.h"
 
 
 
@@ -183,6 +184,11 @@ void draw_paddle() {
 }
 
 // --- UI ---
+void draw_rect(int x, int y, int w, int h, uint16_t color) {
+    tft.fillRect(x, y, w, h, color);
+}
+
+
 void black_screen() {
     tft.fillScreen(~ST77XX_BLACK);
 }
@@ -221,7 +227,7 @@ void draw_leaderboard(int score, int max_score) {
     tft.printf(score_str);
     y += 8;
 
-    sprintf(score_str, "MAX SCORE: %d", max_score);
+    sprintf(score_str, "HIGH SCORE: %d", max_score);
 
     textLength = strlen(score_str);
     textWidth = textLength * charWidth;
@@ -231,50 +237,71 @@ void draw_leaderboard(int score, int max_score) {
     tft.printf(score_str);
 }
 
+
+void draw_batt_volts() {
+    tft.setTextSize(1);
+    char batt_buf[10];
+    snprintf(batt_buf, sizeof(batt_buf), "%.2fV", battery_volts);
+    int batt_text_width = strlen(batt_buf) * 6; // 6 pixels per char at size 1
+
+    // Clear background behind old voltage
+    int batt_x = 240 - batt_text_width - 2;
+    int batt_y = 2;
+    tft.fillRect(batt_x, batt_y, batt_text_width + 4, 8, ~ST77XX_BLACK); // 6*chars wide, 8 pixels tall
+
+    // Draw updated voltage
+    tft.setCursor(batt_x, batt_y);
+    tft.setTextColor(~ST77XX_WHITE);
+    tft.print(batt_buf);
+}
+
+
 void drawpausescreen(int selected_option) {
     black_screen();
     tft.setTextSize(2);
 
-    // Centered "PAUSED..." text, moved up a bit
+    // Centered "PAUSED..." text
     const char* paused_text = "PAUSED...";
     int charWidth = 6 * 2;
     int charHeight = 8 * 2;
     int textWidth = strlen(paused_text) * charWidth;
     int paused_x = (240 - textWidth) / 2;
-    int paused_y = 60; // Moved up to leave room below
+    int paused_y = 60;
 
     tft.setTextColor(~ST77XX_WHITE);
     tft.setCursor(paused_x, paused_y);
     tft.printf(paused_text);
 
-    // Options
-    const char* options[] = { "Brightness", "Reset Game", "Restart Console" };
+    draw_batt_volts();
+
+    // Restore text size for menu
+    tft.setTextSize(2);
+
+    const char* options[] = { "Brightness", "LED", "Reset Game", "Restart Console" };
     int box_width = 180;
     int box_height = 40;
     int box_x = (240 - box_width) / 2;
     int first_box_y = 120;
     int spacing = 10;
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         int box_y = first_box_y + i * (box_height + spacing);
         if (i == selected_option) {
-            // Highlighted option: blue background, white text
             tft.fillRect(box_x, box_y, box_width, box_height, ~ST77XX_BLUE);
             tft.setTextColor(~ST77XX_WHITE);
         } else {
-            // Unselected: black with white border
             tft.fillRect(box_x, box_y, box_width, box_height, ~ST77XX_BLACK);
             tft.drawRect(box_x, box_y, box_width, box_height, ~ST77XX_WHITE);
             tft.setTextColor(~ST77XX_WHITE);
         }
 
-        // Center text inside the box
         int text_x = box_x + (box_width - strlen(options[i]) * charWidth) / 2;
         int text_y = box_y + (box_height - charHeight) / 2;
         tft.setCursor(text_x, text_y);
         tft.print(options[i]);
     }
 }
+
 
 
 void drawloadtext() {
@@ -418,9 +445,9 @@ void draw_brick(int row, int col, bool overridecol, uint16_t color) {
     int bx = g_info->current_level.brickOffsetX + col * (g_info->current_level.brickWidth + g_info->current_level.brickSpacing);
     int by = g_info->current_level.brickOffsetY + row * (g_info->current_level.brickHeight + g_info->current_level.brickSpacing);
 
-    if (!overridecol)
+    if (!overridecol && durability > 0)
         tft.fillRect(bx, by, g_info->current_level.brickWidth, g_info->current_level.brickHeight, getBrickColor(durability));
-    else
+    else if (overridecol)
         tft.fillRect(bx, by, g_info->current_level.brickWidth, g_info->current_level.brickHeight, color);
     
 }
@@ -464,18 +491,26 @@ void drawMissile(int x, int y) {
 }
 
 void drawExtraBalls(int x, int y) {
-    tft.fillCircle(x - 6, y, 3, ~ST77XX_CYAN);
-    tft.fillCircle(x, y, 3, ~ST77XX_CYAN);
-    tft.fillCircle(x + 6, y, 3, ~ST77XX_CYAN);
+    tft.fillCircle(x - 4, y, 2, ~ST77XX_CYAN);
+    tft.fillCircle(x,     y, 2, ~ST77XX_CYAN);
+    tft.fillCircle(x + 4, y, 2, ~ST77XX_CYAN);
 }
 
 void drawLargeBall(int x, int y) {
-    tft.fillCircle(x, y, 6, ~ST77XX_YELLOW);
+    tft.fillCircle(x, y, 4, ~ST77XX_YELLOW); // 8px diameter fits in 10x10
 }
 
 void drawLaser(int x, int y) {
-    tft.fillRoundRect(x - 10, y, 20, 6, 3, ~ST77XX_RED);
+    tft.fillRoundRect(x - 4, y - 2, 8, 4, 2, ~ST77XX_RED); // fits inside 10x10 centered
 }
+
+void drawPlusOne(int x, int y) {
+    tft.setTextSize(1);
+    tft.setTextColor(~ST77XX_GREEN);
+    tft.setCursor(x - 3, y - 4); // Center 6x8 character in 10x10
+    tft.print("+");
+}
+
 
 // --- BRIGHTNESS ---
 void set_brightness(uint32_t duty) {

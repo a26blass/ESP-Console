@@ -13,31 +13,6 @@ debug_t debug = {
     .screen_init = false,
 };
 
-// Async task handler
-TaskHandle_t led_task_handle = NULL; // Handle for LED task
-
-// LED tasks
-void blink_LED(void *parameter) {
-    while (1) {
-        digitalWrite(LED_PIN, !digitalRead(LED_PIN));  // Toggle LED
-        vTaskDelay(pdMS_TO_TICKS(LED_FLASH_INTERVAL));  // delay 
-    }
-}
-
-void start_blinking() {
-    if (led_task_handle == NULL) {
-        xTaskCreate(blink_LED, "LED Task", 1024, NULL, 1, &led_task_handle);
-    }
-}
-
-void stop_blinking() {
-    if (led_task_handle != NULL) {
-        vTaskDelete(led_task_handle);  // Kill the task
-        led_task_handle = NULL;
-        digitalWrite(LED_PIN, LOW);  // Ensure LED is off
-    }
-}
-
 
 // Panic Handler
 extern "C" void __wrap_esp_panic_handler(void *frame) {
