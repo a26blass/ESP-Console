@@ -6,6 +6,7 @@
 #define LED_FLASH_INTERVAL 35
 
 #ifndef DEBUG_H
+#define DEBUG_H
 
 typedef struct {
     bool setup_complete;

@@ -2,6 +2,7 @@
 #include "debug.h"
 #include "game.h"
 #include "display.h"
+#include "system.h"
 #include "esp_system.h"
 #include "esp_task_wdt.h"
 #include "esp_log.h"
@@ -142,11 +143,18 @@ void debug_init() {
     debug.screen_init = true;
 
     drawloadtext();
+
+    sprintf(msg, "BATT VOLTS: %.2f - OK...", battery_volts);
+    ESP_LOGI("DEBUG", "%s", msg);
+
+    #ifdef DEBUG
+        drawdebugtext(msg);
+    #endif
     
     esp_chip_info_t c_info;
     esp_chip_info(&c_info);
     sprintf(msg, "CPU MODEL %s (%d CORES)...", chip_model_to_string(c_info.model), c_info.cores);
-    ESP_LOGI("DEBUG", msg);
+    ESP_LOGI("DEBUG", "%s", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
@@ -158,20 +166,20 @@ void debug_init() {
     bool flash = (c_info.features & CHIP_FEATURE_EMB_FLASH) != 0;
     bool psram = (c_info.features & CHIP_FEATURE_EMB_PSRAM) != 0;
     sprintf(msg, "BLU: %d | BLE : %d | IEEE802154 : %d", blu, ble, w_support);
-    ESP_LOGI("DEBUG", msg);
+    ESP_LOGI("DEBUG", "%s", msg);
     #ifdef DEBUG
         drawdebugtext("FEATURE FLAGS:");
         drawdebugtext(msg);
     #endif
     sprintf(msg, "W_BGN: %d | FLASH : %d | PSRAM : %d", wifi_bgn, flash, psram);
-    ESP_LOGI("DEBUG", msg);
+    ESP_LOGI("DEBUG", "%s", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
 
     esp_reset_reason_t reset_reason = esp_reset_reason();
     sprintf(msg, "RESET REASON: %s", reset_reason_to_string(reset_reason));
-    ESP_LOGI("DEBUG", msg);
+    ESP_LOGI("DEBUG", "%s", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
@@ -189,20 +197,20 @@ void debug_init() {
     #endif
 
     sprintf(msg, "FREE HEAP MEMORY: %dB (%dKB)", esp_get_free_heap_size(), esp_get_free_heap_size()/1000);
-    ESP_LOGI("DEBUG", msg);
+    ESP_LOGI("DEBUG", "%s", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
 
     UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(NULL);
     sprintf(msg, "FREE STACK MEMORY: %dB (%dKB)", stack_remaining, stack_remaining/1000);
-    ESP_LOGI("DEBUG", msg);
+    ESP_LOGI("DEBUG", "%s", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif
 
     sprintf(msg, "ESP IDF %s", esp_get_idf_version());
-    ESP_LOGI("DEBUG", msg);
+    ESP_LOGI("DEBUG", "%s", msg);
     #ifdef DEBUG
         drawdebugtext(msg);
     #endif  
